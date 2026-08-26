@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0 - 2026-08-26
+
+- Replace the single-line manual path prompt with live child-directory suggestions.
+- Add keyboard and mouse selection, Tab/right-arrow drill-down, and path filtering.
+- Share the enhanced directory picker across every configured Agent.
+
 ## 0.1.0 - 2026-08-26
 
 - Add the keyboard-first Agent and directory picker.

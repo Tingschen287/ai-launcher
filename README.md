@@ -19,6 +19,7 @@ A keyboard-first terminal launcher for Claude Code, Codex CLI, Grok, Kimi, and o
 
 - 键盘、数字键和鼠标选择 Agent
 - 最近目录、Git 分支与工作区状态
+- 手动输入路径时实时展示和筛选下级目录
 - TOML 驱动的 Agent 注册表
 - 每个 Agent 独立的颜色、环境变量、PATH、代理策略和默认目录
 - Windows Terminal 隐藏 Profile 页签交接
@@ -66,6 +67,17 @@ ai --version               查看版本
 ```
 
 `--` 后面的参数会原样传给 Agent CLI。
+
+### 路径补全
+
+在目录菜单按 `/` 会从根目录开始输入，按 `e` 会从当前选中的目录开始浏览。输入过程中，下方会实时列出匹配的直接子目录：
+
+- `↑` / `↓`：选择候选目录
+- `Tab` / `→`：补全候选并进入下一级
+- `Enter`：确认当前有效路径或选中的候选
+- 鼠标单击：直接确认候选目录
+- `Ctrl+U`：清空输入
+- `Esc`：回到最近目录菜单
 
 ## 配置
 

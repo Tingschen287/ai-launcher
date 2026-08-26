@@ -75,6 +75,40 @@ class LauncherTests(unittest.TestCase):
         self.assertIn('codex "$@"', script)
         self.assertIn("cd /tmp/project", script)
 
+    def test_path_suggestions_filter_directories_and_preserve_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Alpha").mkdir()
+            (root / "beta").mkdir()
+            (root / ".hidden").mkdir()
+            (root / "artifact.txt").write_text("not a directory")
+            suggestions = launcher.path_suggestions(f"{directory}/a")
+        self.assertEqual([item["name"] for item in suggestions], ["Alpha"])
+        self.assertEqual(suggestions[0]["input"], f"{directory}/Alpha/")
+
+    def test_path_suggestions_hide_dot_directories_until_requested(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".hidden").mkdir()
+            (root / "visible").mkdir()
+            regular = launcher.path_suggestions(f"{directory}/")
+            hidden = launcher.path_suggestions(f"{directory}/.")
+        self.assertEqual([item["name"] for item in regular], ["visible"])
+        self.assertEqual([item["name"] for item in hidden], [".hidden"])
+
+    def test_path_picker_can_drill_down_with_tab(self):
+        with tempfile.TemporaryDirectory() as directory:
+            child = Path(directory) / "alpha" / "child"
+            child.mkdir(parents=True)
+            geometry = {"rows": {}, "bottom": 1, "left": 0}
+            with patch.object(launcher, "draw", return_value=geometry):
+                result = launcher.pick_path(
+                    FakeTerm("\t", "down", "\r"),
+                    {"key": "x", "name": "X", "color": "#ffffff"},
+                    f"{directory}/a",
+                )
+            self.assertEqual(result, str(child))
+
 
 if __name__ == "__main__":
     unittest.main()

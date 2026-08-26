@@ -28,7 +28,7 @@ import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 
 HOME = os.path.expanduser("~")
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 CONF = os.environ.get(
     "AI_LAUNCHER_CONFIG",
     os.path.join(HOME, ".config", "ai-launcher", "agents.toml"),
@@ -39,6 +39,7 @@ HIST = os.environ.get(
 )
 HIST_KEEP = 24      # 历史文件里最多留多少条
 HIST_SHOW = 8       # 菜单里最多显示多少条
+PATH_SHOW = 9       # 路径补全里最多显示多少个子目录
 
 ESC = "\x1b"
 FG = lambda c: f"{ESC}[38;2;{int(c[1:3],16)};{int(c[3:5],16)};{int(c[5:7],16)}m"
@@ -292,51 +293,38 @@ class Term:
                             "D": "left", "H": "home", "F": "end"}.get(buf, ""))
         return ("key", "esc")
 
-    def readline(self, prompt: str, row: int, indent: int = 2, complete=True) -> str:
-        """在指定行做一次带 Tab 补全的行输入；Esc 取消返回 None。"""
-        buf = ""
-        self.show_cursor(True)
-        while True:
-            sys.stdout.write(f"{ESC}[{row};1H{ESC}[2K{' ' * indent}"
-                             f"{ACCENT}{prompt}{RESET}{TEXT}{buf}{RESET}")
-            sys.stdout.flush()
-            kind, *rest = self.key()
-            if kind != "key":
-                continue
-            k = rest[0]
-            if k in ("\r", "\n"):
-                self.show_cursor(False)
-                return buf.strip()
-            if k == "esc" or k == "\x03":
-                self.show_cursor(False)
-                return None
-            if k in ("\x7f", "\b"):
-                buf = buf[:-1]
-            elif k == "\t" and complete:
-                buf = tab_complete(buf)
-            elif k and len(k) == 1 and (k.isprintable()):
-                buf += k
-
-
-def tab_complete(buf: str) -> str:
-    """把输入补到最长公共前缀。"""
+def path_suggestions(buf: str, limit: int = PATH_SHOW):
+    """返回当前路径片段匹配的直接子目录，保留用户输入的路径写法。"""
     if not buf:
-        return buf
-    raw = os.path.expanduser(os.path.expandvars(buf))
-    base, frag = os.path.split(raw)
-    base = base or "."
+        return []
+    if buf.endswith(os.sep) or buf in ("~", "$HOME"):
+        parent = expand(buf)
+        fragment = ""
+        prefix = buf if buf.endswith(os.sep) else buf + os.sep
+    else:
+        raw_parent, fragment = os.path.split(buf)
+        parent = expand(raw_parent or os.curdir)
+        prefix = buf[:-len(fragment)] if fragment else buf
+    if not os.path.isdir(parent):
+        return []
     try:
-        names = [n for n in os.listdir(base)
-                 if n.startswith(frag) and os.path.isdir(os.path.join(base, n))]
+        names = [
+            name for name in os.listdir(parent)
+            if name.lower().startswith(fragment.lower())
+            and (fragment.startswith(".") or not name.startswith("."))
+            and os.path.isdir(os.path.join(parent, name))
+        ]
     except OSError:
-        return buf
-    if not names:
-        return buf
-    common = os.path.commonprefix(names)
-    tail = common[len(frag):]
-    if len(names) == 1:
-        tail += "/"
-    return buf + tail
+        return []
+    names.sort(key=lambda name: (name.lower(), name))
+    return [
+        {
+            "name": name,
+            "path": os.path.abspath(os.path.join(parent, name)),
+            "input": prefix + name + os.sep,
+        }
+        for name in names[:limit]
+    ]
 
 
 # ─────────────────────────── 渲染 ───────────────────────────
@@ -441,6 +429,19 @@ def dir_row(it, num):
     return render
 
 
+def path_candidate_row(it, color):
+    def render(selected):
+        mark = f"{FG(color)}▸{RESET}" if selected else " "
+        bg = SELBG if selected else ""
+        name_w = min(26, max(18, BOX_W // 3))
+        path_w = max(BOX_W - name_w - 10, 12)
+        body = (f"{bg}  {mark}{bg}    "
+                f"{FG(color)}{BOLD if selected else ''}{pad(it['name'] + '/', name_w)}{RESET}{bg} "
+                f"{DIM}{pad_tail(shorten(it['path']), path_w)}{RESET}{bg}")
+        return fit_row(body)
+    return render
+
+
 def pad_ansi(s: str, w: int) -> str:
     """给已带颜色码的短串补空格（按可见字符算宽）。"""
     return s + " " * max(w - dwidth(strip_ansi(s)), 0)
@@ -482,6 +483,66 @@ def pick_agent(term, agents):
             return None
 
 
+def pick_path(term, agent, initial=""):
+    """实时路径输入：展示匹配子目录，并支持键盘或鼠标完成选择。"""
+    buf = initial
+    sel = -1
+    error = ""
+    while True:
+        suggestions = path_suggestions(buf)
+        valid = bool(buf) and os.path.isdir(expand(buf))
+        shown = pad_tail(buf, max(BOX_W - 14, 12)).rstrip() if buf else ""
+        rows = [
+            (False, lambda _, shown=shown:
+             f"    {DIM}路径:{RESET} {TEXT}{shown}{RESET}{FG(agent['color'])}█{RESET}"),
+            (False, lambda _: ""),
+        ]
+        if error:
+            rows.append((False, lambda _, error=error: f"    {RED}{error}{RESET}"))
+        elif not suggestions:
+            hint = "当前目录没有子目录" if valid else "继续输入，或按 Esc 返回"
+            rows.append((False, lambda _, hint=hint: f"    {DIM}{hint}{RESET}"))
+        rows.extend((True, path_candidate_row(item, agent["color"]))
+                    for item in suggestions)
+        state = "目录 ✓" if valid else f"{len(suggestions)} 个匹配"
+        title = f"{FG(agent['color'])}{agent['name']}{RESET}{DIM} › 输入目录{RESET}"
+        geom = draw(title, state, rows, sel,
+                    "↑↓ 选 · Tab/→ 下级 · Enter 确认 · Ctrl+U 清空 · Esc 返回")
+        kind, *rest = term.key()
+        if kind == "mouse":
+            row, col, _ = rest
+            i = hit(geom, row, col)
+            if i is not None and i < len(suggestions):
+                return suggestions[i]["path"]
+            continue
+        k = rest[0]
+        if k == "up" and suggestions:
+            sel = len(suggestions) - 1 if sel < 0 else (sel - 1) % len(suggestions)
+        elif k == "down" and suggestions:
+            sel = 0 if sel < 0 else (sel + 1) % len(suggestions)
+        elif k in ("\t", "right") and suggestions:
+            i = sel if 0 <= sel < len(suggestions) else 0
+            buf = suggestions[i]["input"]
+            sel, error = -1, ""
+        elif k in ("\r", "\n"):
+            if 0 <= sel < len(suggestions):
+                return suggestions[sel]["path"]
+            if valid:
+                return expand(buf)
+            if len(suggestions) == 1:
+                return suggestions[0]["path"]
+            error = "目录不存在，请继续输入或从候选中选择"
+        elif k in ("esc", "\x03"):
+            return None
+        elif k in ("\x7f", "\b"):
+            buf, sel, error = buf[:-1], -1, ""
+        elif k == "\x15":
+            buf, sel, error = "", -1, ""
+        elif k and len(k) == 1 and k.isprintable():
+            buf += k
+            sel, error = -1, ""
+
+
 def pick_dir(term, agent, allow_back):
     items = dir_candidates(agent)
     fill_git(items)
@@ -489,7 +550,7 @@ def pick_dir(term, agent, allow_back):
     title = f"{FG(agent['color'])}{agent['name']}{RESET}{DIM} › 选目录{RESET}"
     right = f"{agent['key']} · {status_right()}"
     hint = ("Esc 返回 · " if allow_back else "") + \
-           "Enter 进 · / 输路径 · Tab 补全 · q 退出"
+           "Enter 进 · / 从根输入 · e 浏览当前 · q 退出"
     while True:
         rows = [(True, dir_row(it, i + 1)) for i, it in enumerate(items)]
         rows.append((False, lambda _: ""))
@@ -512,11 +573,10 @@ def pick_dir(term, agent, allow_back):
         elif len(k) == 1 and "1" <= k <= "9" and int(k) <= len(items):
             return items[int(k) - 1]["path"]
         elif k in ("/", "e"):
-            typed = term.readline("路径: ", geom["bottom"] + 2, geom["left"] + 2)
+            initial = "/" if k == "/" else shorten(items[sel]["path"]).rstrip("/") + "/"
+            typed = pick_path(term, agent, initial)
             if typed:
-                p = expand(typed)
-                if os.path.isdir(p):
-                    return p
+                return typed
         elif k in ("esc", "left", "h") and allow_back:
             return None
         elif k in ("q", "\x03"):
