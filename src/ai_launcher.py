@@ -29,7 +29,7 @@ import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 
 HOME = os.path.expanduser("~")
-VERSION = "0.4.1"
+VERSION = "0.5.0"
 CONF = os.environ.get(
     "AI_LAUNCHER_CONFIG",
     os.path.join(HOME, ".config", "ai-launcher", "agents.toml"),
@@ -349,7 +349,33 @@ def frame(title: str, right: str):
             f"{DIM}╰{'─' * inner}╯{RESET}"]
 
 
-def draw(header_title, header_right, rows, sel, footer):
+def mode_header(agent, resume=False, hover=None):
+    """渲染目录页 New/Resume tabs，并返回相对标题起点的鼠标区域。"""
+    prefix_plain = f"{agent['name']} › "
+    prefix = f"{FG(agent['color'])}{agent['name']}{RESET}{DIM} › {RESET}"
+    labels = [("new", " New ")]
+    if agent.get("resume_args"):
+        labels.append(("resume", " Resume "))
+    parts = [prefix]
+    regions = []
+    offset = dwidth(prefix_plain)
+    for i, (mode, label) in enumerate(labels):
+        if i:
+            parts.append(f"{DIM}|{RESET}")
+            offset += 1
+        active = resume if mode == "resume" else not resume
+        hovered = hover == mode and not active
+        bg = SELBG if active or hovered else ""
+        color = FG(agent["color"]) if active or hovered else DIM
+        weight = BOLD if active else ""
+        parts.append(f"{bg}{color}{weight}{label}{RESET}")
+        width = dwidth(label)
+        regions.append({"start": offset, "end": offset + width - 1, "mode": mode})
+        offset += width
+    return "".join(parts), regions
+
+
+def draw(header_title, header_right, rows, sel, footer, header_regions=None):
     """rows: [(可选中?, 渲染函数(selected)->str)]。
 
     整块内容在终端里水平 + 垂直居中。返回几何信息，供鼠标命中判定和
@@ -383,8 +409,17 @@ def draw(header_title, header_right, rows, sel, footer):
     sys.stdout.write(f"{ESC}[H{ESC}[2J" + "\r\n".join(out))
     sys.stdout.flush()
     # 屏幕行号从 1 起：块内偏移 + top + 1
+    # 标题文字首字符在 left + 3；标题内容位于 frame 的第二行。
+    tabs = [
+        {**region,
+         "start": left + 3 + region["start"],
+         "end": left + 3 + region["end"],
+         "row": top + 2}
+        for region in (header_regions or [])
+    ]
     return {"rows": {v_row + top + 1: i for v_row, i in rowmap.items()},
-            "left": left, "width": width, "bottom": top + len(lines)}
+            "tabs": tabs, "left": left, "width": width,
+            "bottom": top + len(lines)}
 
 
 def hit(geom, row, col):
@@ -392,6 +427,13 @@ def hit(geom, row, col):
     if not (geom["left"] < col <= geom["left"] + geom["width"]):
         return None
     return geom["rows"].get(row)
+
+
+def hit_tab(geom, row, col):
+    for region in geom.get("tabs", []):
+        if row == region["row"] and region["start"] <= col <= region["end"]:
+            return region["mode"]
+    return None
 
 
 def strip_ansi(s: str) -> str:
@@ -585,44 +627,44 @@ def pick_dir(term, agent, allow_back):
     sel = 0
     path_sel = 0
     hover = None
+    tab_hover = None
     can_resume = bool(agent.get("resume_args"))
-    title = f"{FG(agent['color'])}{agent['name']}{RESET}{DIM} › 选目录{RESET}"
+    resume_mode = False
     right = f"{agent['key']} · {status_right(agent)}"
     hint = ("Esc 返回 · " if allow_back else "") + \
-           "Enter 新会话 · r 会话选择 · / 路径 · q 退出"
+           "Tab New/Resume · Enter 选择 · / 路径 · q 退出"
     while True:
         rows = [(True, dir_row(it, i + 1)) for i, it in enumerate(items)]
         rows.append((False, lambda _: ""))
-        resume_idx = None
-        if can_resume:
-            resume_idx = len(items)
-            rows.append((True, action_row(
-                "↻", "打开 Resume 会话选择", shorten(items[path_sel]["path"]),
-                agent["color"])))
-        manual_idx = len(items) + (1 if can_resume else 0)
+        manual_idx = len(items)
         rows.append((True, action_row(
             "/", "输入其它路径", "实时目录补全", agent["color"])))
         selectable_count = manual_idx + 1
+        title, tab_regions = mode_header(agent, resume_mode, tab_hover)
         visual_sel = hover if hover is not None else sel
-        geom = draw(title, right, rows, visual_sel, hint)
+        geom = draw(title, right, rows, visual_sel, hint, tab_regions)
         kind, *rest = term.key()
         if kind == "mouse":
             row, col, action = rest
+            tab = hit_tab(geom, row, col)
             i = hit(geom, row, col)
             if action == "move":
-                hover = i
+                tab_hover = tab
+                hover = None if tab is not None else i
+            elif action == "click" and tab is not None:
+                resume_mode = tab == "resume"
+                tab_hover = None
             elif action == "click" and i is not None:
                 if i < len(items):
-                    return items[i]["path"], False
-                if i == resume_idx:
-                    return items[path_sel]["path"], True
+                    return items[i]["path"], resume_mode
                 if i == manual_idx:
                     initial = shorten(items[path_sel]["path"]).rstrip("/") + "/"
                     typed = pick_path(term, agent, initial)
                     if typed:
-                        return typed, False
+                        return typed, resume_mode
             continue
         hover = None
+        tab_hover = None
         k = rest[0]
         if k in ("up", "k"):
             sel = (sel - 1) % selectable_count
@@ -634,23 +676,25 @@ def pick_dir(term, agent, allow_back):
                 path_sel = sel
         elif k in ("\r", "\n", "right", "l"):
             if sel < len(items):
-                return items[sel]["path"], False
-            if sel == resume_idx:
-                return items[path_sel]["path"], True
+                return items[sel]["path"], resume_mode
             if sel == manual_idx:
                 initial = shorten(items[path_sel]["path"]).rstrip("/") + "/"
                 typed = pick_path(term, agent, initial)
                 if typed:
-                    return typed, False
+                    return typed, resume_mode
         elif len(k) == 1 and "1" <= k <= "9" and int(k) <= len(items):
-            return items[int(k) - 1]["path"], False
+            return items[int(k) - 1]["path"], resume_mode
         elif k == "r" and can_resume:
-            return items[path_sel]["path"], True
+            resume_mode = True
+        elif k == "n":
+            resume_mode = False
+        elif k == "\t" and can_resume:
+            resume_mode = not resume_mode
         elif k in ("/", "e"):
             initial = "/" if k == "/" else shorten(items[path_sel]["path"]).rstrip("/") + "/"
             typed = pick_path(term, agent, initial)
             if typed:
-                return typed, False
+                return typed, resume_mode
         elif k in ("esc", "left", "h") and allow_back:
             return None
         elif k in ("q", "\x03"):

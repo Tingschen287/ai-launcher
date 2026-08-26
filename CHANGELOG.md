@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0 - 2026-08-26
+
+- Replace the separate Resume action row with `New | Resume` title tabs.
+- Apply the active mode consistently to keyboard, number-key, path-input, and mouse selections.
+- Default every directory page to New mode.
+
 ## 0.4.1 - 2026-08-26
 
 - Change Resume from automatic latest-session continuation to each Agent's native session picker.

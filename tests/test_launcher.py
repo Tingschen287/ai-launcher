@@ -93,10 +93,10 @@ class LauncherTests(unittest.TestCase):
             with patch.object(launcher, "dir_candidates", return_value=[item]), \
                     patch.object(launcher, "fill_git"), \
                     patch.object(launcher, "draw", return_value=geometry):
-                result = launcher.pick_dir(FakeTerm("r"), agent, allow_back=False)
+                result = launcher.pick_dir(FakeTerm("r", "\r"), agent, allow_back=False)
             self.assertEqual(result, (directory, True))
 
-    def test_directory_picker_resume_action_is_clickable(self):
+    def test_directory_picker_resume_tab_is_clickable(self):
         with tempfile.TemporaryDirectory() as directory:
             item = {"path": directory, "ts": None}
             agent = {
@@ -106,13 +106,38 @@ class LauncherTests(unittest.TestCase):
                 "default_dir": directory,
                 "resume_args": ["resume"],
             }
-            geometry = {"rows": {10: 1}, "left": 0, "width": 20}
-            events = EventTerm(("mouse", 10, 5, "click"))
+            geometry = {
+                "rows": {10: 0},
+                "tabs": [{"row": 5, "start": 20, "end": 27, "mode": "resume"}],
+                "left": 0,
+                "width": 40,
+            }
+            events = EventTerm(
+                ("mouse", 5, 22, "click"),
+                ("mouse", 10, 5, "click"),
+            )
             with patch.object(launcher, "dir_candidates", return_value=[item]), \
                     patch.object(launcher, "fill_git"), \
                     patch.object(launcher, "draw", return_value=geometry):
                 result = launcher.pick_dir(events, agent, allow_back=False)
             self.assertEqual(result, (directory, True))
+
+    def test_resume_mode_defaults_to_new(self):
+        with tempfile.TemporaryDirectory() as directory:
+            item = {"path": directory, "ts": None}
+            agent = {
+                "key": "codex",
+                "name": "Codex",
+                "color": "#ffffff",
+                "default_dir": directory,
+                "resume_args": ["resume"],
+            }
+            geometry = {"rows": {}, "bottom": 1, "left": 0}
+            with patch.object(launcher, "dir_candidates", return_value=[item]), \
+                    patch.object(launcher, "fill_git"), \
+                    patch.object(launcher, "draw", return_value=geometry):
+                result = launcher.pick_dir(FakeTerm("\r"), agent, allow_back=False)
+            self.assertEqual(result, (directory, False))
 
     def test_sgr_mouse_motion_is_reported_as_hover_event(self):
         sequence = [launcher.ESC, "["] + list("<35;12;7M")
