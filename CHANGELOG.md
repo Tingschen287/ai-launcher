@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 - 2026-08-26
+
+- Add config-driven resume commands for every bundled Agent.
+- Add keyboard and mouse resume actions to the shared directory page.
+- Support direct resume with `ai --resume <agent> <directory>`.
+
 ## 0.3.0 - 2026-08-26
 
 - Add mouse-motion tracking and hover highlighting to every clickable row.

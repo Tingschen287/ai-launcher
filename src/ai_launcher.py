@@ -5,6 +5,7 @@
   ai                    交互：先选 agent，再选目录
   ai cco                指定 agent，只选目录
   ai cco ~/dev/ai       直接启动，不进菜单
+  ai --resume cco DIR   恢复该目录最近会话
   ai --list             打印 agent 清单
   ai --shell            直接开 shell（选完目录）
 
@@ -28,7 +29,7 @@ import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 
 HOME = os.path.expanduser("~")
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 CONF = os.environ.get(
     "AI_LAUNCHER_CONFIG",
     os.path.join(HOME, ".config", "ai-launcher", "agents.toml"),
@@ -147,8 +148,12 @@ def load_agents():
         a.setdefault("env", {})
         a.setdefault("unset", [])
         a.setdefault("wt_profile", "")
+        a.setdefault("resume_args", [])
         if not re.fullmatch(r"#[0-9a-fA-F]{6}", a["color"]):
             sys.exit(f"agent {a['key']} 的 color 不是 #RRGGBB：{a['color']}")
+        if not isinstance(a["resume_args"], list) or \
+                not all(isinstance(arg, str) and arg for arg in a["resume_args"]):
+            sys.exit(f"agent {a['key']} 的 resume_args 必须是字符串数组")
     if not agents:
         sys.exit("配置里没有任何 [[agent]]")
     return agents
@@ -444,6 +449,19 @@ def path_candidate_row(it, color):
     return render
 
 
+def action_row(symbol, label, note, color):
+    def render(selected):
+        mark = f"{FG(color)}▸{RESET}" if selected else " "
+        bg = SELBG if selected else ""
+        label_w = min(28, max(20, BOX_W // 2))
+        note_w = max(BOX_W - label_w - 12, 10)
+        body = (f"{bg}  {mark}{bg}    {FG(color)}{symbol} "
+                f"{BOLD if selected else ''}{pad(label, label_w)}{RESET}{bg} "
+                f"{DIM}{pad_tail(note, note_w)}{RESET}{bg}")
+        return fit_row(body)
+    return render
+
+
 def pad_ansi(s: str, w: int) -> str:
     """给已带颜色码的短串补空格（按可见字符算宽）。"""
     return s + " " * max(w - dwidth(strip_ansi(s)), 0)
@@ -565,15 +583,26 @@ def pick_dir(term, agent, allow_back):
     items = dir_candidates(agent)
     fill_git(items)
     sel = 0
+    path_sel = 0
     hover = None
+    can_resume = bool(agent.get("resume_args"))
     title = f"{FG(agent['color'])}{agent['name']}{RESET}{DIM} › 选目录{RESET}"
     right = f"{agent['key']} · {status_right(agent)}"
     hint = ("Esc 返回 · " if allow_back else "") + \
-           "Enter 进 · / 从根输入 · e 浏览当前 · q 退出"
+           "Enter 新会话 · r 恢复 · / 路径 · q 退出"
     while True:
         rows = [(True, dir_row(it, i + 1)) for i, it in enumerate(items)]
         rows.append((False, lambda _: ""))
-        rows.append((False, lambda _: f"    {DIM} /{RESET}  {MUTED}输入其它路径…{RESET}"))
+        resume_idx = None
+        if can_resume:
+            resume_idx = len(items)
+            rows.append((True, action_row(
+                "↻", "恢复所选目录最近会话", shorten(items[path_sel]["path"]),
+                agent["color"])))
+        manual_idx = len(items) + (1 if can_resume else 0)
+        rows.append((True, action_row(
+            "/", "输入其它路径", "实时目录补全", agent["color"])))
+        selectable_count = manual_idx + 1
         visual_sel = hover if hover is not None else sel
         geom = draw(title, right, rows, visual_sel, hint)
         kind, *rest = term.key()
@@ -583,23 +612,45 @@ def pick_dir(term, agent, allow_back):
             if action == "move":
                 hover = i
             elif action == "click" and i is not None:
-                return items[i]["path"]
+                if i < len(items):
+                    return items[i]["path"], False
+                if i == resume_idx:
+                    return items[path_sel]["path"], True
+                if i == manual_idx:
+                    initial = shorten(items[path_sel]["path"]).rstrip("/") + "/"
+                    typed = pick_path(term, agent, initial)
+                    if typed:
+                        return typed, False
             continue
         hover = None
         k = rest[0]
         if k in ("up", "k"):
-            sel = (sel - 1) % len(items)
+            sel = (sel - 1) % selectable_count
+            if sel < len(items):
+                path_sel = sel
         elif k in ("down", "j"):
-            sel = (sel + 1) % len(items)
+            sel = (sel + 1) % selectable_count
+            if sel < len(items):
+                path_sel = sel
         elif k in ("\r", "\n", "right", "l"):
-            return items[sel]["path"]
+            if sel < len(items):
+                return items[sel]["path"], False
+            if sel == resume_idx:
+                return items[path_sel]["path"], True
+            if sel == manual_idx:
+                initial = shorten(items[path_sel]["path"]).rstrip("/") + "/"
+                typed = pick_path(term, agent, initial)
+                if typed:
+                    return typed, False
         elif len(k) == 1 and "1" <= k <= "9" and int(k) <= len(items):
-            return items[int(k) - 1]["path"]
+            return items[int(k) - 1]["path"], False
+        elif k == "r" and can_resume:
+            return items[path_sel]["path"], True
         elif k in ("/", "e"):
-            initial = "/" if k == "/" else shorten(items[sel]["path"]).rstrip("/") + "/"
+            initial = "/" if k == "/" else shorten(items[path_sel]["path"]).rstrip("/") + "/"
             typed = pick_path(term, agent, initial)
             if typed:
-                return typed
+                return typed, False
         elif k in ("esc", "left", "h") and allow_back:
             return None
         elif k in ("q", "\x03"):
@@ -608,7 +659,7 @@ def pick_dir(term, agent, allow_back):
 
 # ─────────────────────────── 启动 ───────────────────────────
 
-def build_script(agent, target):
+def build_script(agent, target, resume=False):
     q = shlex.quote(target)
     lines = [
         # .proxy.sh 会在 source 时自动 proxy-on；先关掉自动行为，再由当前
@@ -634,11 +685,13 @@ def build_script(agent, target):
             'unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy '
             'ALL_PROXY all_proxy NO_PROXY no_proxy')
     cmd = agent["cmd"]
+    resume_args = agent.get("resume_args", []) if resume else []
+    invocation = " ".join([cmd] + [shlex.quote(arg) for arg in resume_args])
     lines += [
         f'if ! command -v {cmd} >/dev/null 2>&1; then',
         f'  printf "\\033[31m未找到命令 {cmd}\\033[0m\\n"; exec bash -i',
         'fi',
-        f'{cmd} "$@"',
+        f'{invocation} "$@"',
         'code=$?',
         'if [ "$code" -ne 0 ]; then',
         f'  printf "\\n\\033[31m{cmd} 退出码 $code\\033[0m  \\033[33mshell 保留在 {target}\\033[0m\\n"',
@@ -656,7 +709,7 @@ def build_shell_script(target):
     ])
 
 
-def wt_handoff(agent, target, passthru):
+def wt_handoff(agent, target, passthru, resume=False):
     """在当前 Windows Terminal 窗口开一个新 tab，用该 agent 原来的 profile。
 
     Windows Terminal 的 tab 图标只能由 profile 决定，没有转义序列能在运行时
@@ -675,7 +728,8 @@ def wt_handoff(agent, target, passthru):
         return False
     # AI_LAUNCHER_TITLED=1：新 tab 的标题交给 profile 的 tabTitle 和 agent 自己，
     # 我们不再插一脚，行为跟合并前完全一致。
-    inner = (f"AI_LAUNCHER_TITLED=1 ~/.local/bin/ai --no-handoff "
+    mode = "--resume " if resume else ""
+    inner = (f"AI_LAUNCHER_TITLED=1 ~/.local/bin/ai --no-handoff {mode}"
              f"{agent['key']} {shlex.quote(target)}")
     if passthru:
         inner += " -- " + " ".join(shlex.quote(x) for x in passthru)
@@ -696,9 +750,11 @@ def wt_handoff(agent, target, passthru):
         return False
 
 
-def launch(agent, target, passthru):
+def launch(agent, target, passthru, resume=False):
     write_history(target)
-    if agent != "SHELL" and wt_handoff(agent, target, passthru):
+    if agent != "SHELL" and resume and not agent.get("resume_args"):
+        sys.exit(f"{agent['name']} 未配置 resume_args")
+    if agent != "SHELL" and wt_handoff(agent, target, passthru, resume):
         return                            # 新 tab 已接管，本 tab 就此退出
     if agent == "SHELL":
         sys.stdout.write(f"{ESC}]0;shell · {shorten(target)}\x07")
@@ -708,10 +764,10 @@ def launch(agent, target, passthru):
     if os.environ.get("AI_LAUNCHER_TITLED") != "1":
         sys.stdout.write(f"{ESC}]0;{agent['name']} · {shorten(target)}\x07")
     sys.stdout.write(
-        f"  {FG(agent['color'])}{agent['name']}{RESET}"
+        f"  {FG(agent['color'])}{'↻ ' if resume else ''}{agent['name']}{RESET}"
         f"  {DIM}{shorten(target)}{RESET}\n")
     sys.stdout.flush()
-    argv = ["bash", "-c", build_script(agent, target), "ai"] + passthru
+    argv = ["bash", "-c", build_script(agent, target, resume), "ai"] + passthru
     os.execv("/bin/bash", argv)
 
 
@@ -733,19 +789,26 @@ def main():
         return
     if args and args[0] == "--list":
         for a in agents:
-            print(f"{a['key']:<8} {a['name']:<16} {a['cmd']}")
+            resume = " ".join(a.get("resume_args", [])) or "—"
+            print(f"{a['key']:<8} {a['name']:<16} {a['cmd']:<10} resume: {resume}")
         return
 
     want_shell = False
+    want_resume = False
     while args and args[0].startswith("--"):
         if args[0] == "--shell":
             want_shell = True
+        elif args[0] == "--resume":
+            want_resume = True
         elif args[0] == "--no-handoff":
             # 已经在目标 tab 里了，别再开新 tab
             os.environ.pop("AI_LAUNCHER_HANDOFF", None)
         else:
             sys.exit(f"未知参数：{args[0]}")
         args = args[1:]
+
+    if want_shell and want_resume:
+        sys.exit("纯 Shell 不支持 --resume")
 
     picked = None
     if args and not args[0].startswith("-"):
@@ -761,7 +824,7 @@ def main():
 
     # 全部参数齐了就不进菜单
     if direct_dir and (picked or want_shell):
-        launch("SHELL" if want_shell else picked, direct_dir, passthru)
+        launch("SHELL" if want_shell else picked, direct_dir, passthru, want_resume)
         return
 
     if not sys.stdin.isatty():
@@ -774,12 +837,20 @@ def main():
                 return
             ref = agent if agent != "SHELL" else \
                 {"name": "纯 Shell", "key": "shell",
-                 "color": "#9ca3af", "default_dir": "$HOME/dev"}
-            target = direct_dir or pick_dir(term, ref, allow_back=not (picked or want_shell))
+                 "color": "#9ca3af", "default_dir": "$HOME/dev",
+                 "resume_args": []}
+            if direct_dir:
+                target, resume = direct_dir, want_resume
+            else:
+                choice = pick_dir(term, ref, allow_back=not (picked or want_shell))
+                if choice is None:
+                    continue
+                target, resume = choice
+                resume = resume or want_resume
             if target is None:
                 continue
             break
-    launch(agent, target, passthru)
+    launch(agent, target, passthru, resume)
 
 
 if __name__ == "__main__":

@@ -77,7 +77,42 @@ class LauncherTests(unittest.TestCase):
                     patch.object(launcher, "fill_git"), \
                     patch.object(launcher, "draw", return_value=geometry):
                 result = launcher.pick_dir(FakeTerm("", "\r"), agent, allow_back=False)
-            self.assertEqual(result, directory)
+            self.assertEqual(result, (directory, False))
+
+    def test_directory_picker_can_resume_selected_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            item = {"path": directory, "ts": None}
+            agent = {
+                "key": "codex",
+                "name": "Codex",
+                "color": "#ffffff",
+                "default_dir": directory,
+                "resume_args": ["resume", "--last"],
+            }
+            geometry = {"rows": {}, "bottom": 1, "left": 0}
+            with patch.object(launcher, "dir_candidates", return_value=[item]), \
+                    patch.object(launcher, "fill_git"), \
+                    patch.object(launcher, "draw", return_value=geometry):
+                result = launcher.pick_dir(FakeTerm("r"), agent, allow_back=False)
+            self.assertEqual(result, (directory, True))
+
+    def test_directory_picker_resume_action_is_clickable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            item = {"path": directory, "ts": None}
+            agent = {
+                "key": "codex",
+                "name": "Codex",
+                "color": "#ffffff",
+                "default_dir": directory,
+                "resume_args": ["resume", "--last"],
+            }
+            geometry = {"rows": {10: 1}, "left": 0, "width": 20}
+            events = EventTerm(("mouse", 10, 5, "click"))
+            with patch.object(launcher, "dir_candidates", return_value=[item]), \
+                    patch.object(launcher, "fill_git"), \
+                    patch.object(launcher, "draw", return_value=geometry):
+                result = launcher.pick_dir(events, agent, allow_back=False)
+            self.assertEqual(result, (directory, True))
 
     def test_sgr_mouse_motion_is_reported_as_hover_event(self):
         sequence = [launcher.ESC, "["] + list("<35;12;7M")
@@ -123,11 +158,50 @@ class LauncherTests(unittest.TestCase):
         self.assertIn("export WSL_PROXY_AUTO=0", script)
         self.assertIn("then proxy-on --quiet", script)
 
+    def test_build_script_uses_agent_specific_resume_arguments(self):
+        agent = {
+            "cmd": "codex",
+            "resume_args": ["resume", "--last"],
+            "proxy": True,
+            "path_prepend": [],
+            "unset": [],
+            "env": {},
+        }
+        script = launcher.build_script(agent, "/tmp/project", resume=True)
+        self.assertIn('codex resume --last "$@"', script)
+
+    def test_direct_resume_cli_reaches_launch_mode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            agent = {
+                "key": "codex",
+                "name": "Codex",
+                "cmd": "codex",
+                "resume_args": ["resume", "--last"],
+            }
+            argv = ["ai", "--resume", "codex", directory]
+            with patch.object(launcher, "load_agents", return_value=[agent]), \
+                    patch.object(launcher.sys, "argv", argv), \
+                    patch.object(launcher, "launch") as launch:
+                launcher.main()
+            launch.assert_called_once_with(agent, directory, [], True)
+
     def test_cc_switch_example_is_direct(self):
         with (ROOT / "config" / "agents.example.toml").open("rb") as handle:
             config = tomllib.load(handle)
         agents = {agent["key"]: agent for agent in config["agent"]}
         self.assertFalse(agents["ccs"]["proxy"])
+
+    def test_example_config_has_correct_resume_commands(self):
+        with (ROOT / "config" / "agents.example.toml").open("rb") as handle:
+            config = tomllib.load(handle)
+        actual = {agent["key"]: agent["resume_args"] for agent in config["agent"]}
+        self.assertEqual(actual, {
+            "cco": ["--continue"],
+            "ccs": ["--continue"],
+            "codex": ["resume", "--last"],
+            "grok": ["--continue"],
+            "kimi": ["--continue"],
+        })
 
     def test_path_suggestions_filter_directories_and_preserve_input(self):
         with tempfile.TemporaryDirectory() as directory:
