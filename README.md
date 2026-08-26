@@ -147,9 +147,7 @@ wt_profile = "Codex (WSL)"
 1. 将示例对象合并进 Windows Terminal `settings.json` 的 `profiles.list`。
 2. 把 `<DISTRO>`、`<WSL_USER>` 替换为本机值。
 3. 如 GUID 与本机配置冲突，请重新生成。
-4. 可将 [`assets/ai-launcher.ico`](assets/ai-launcher.ico) 复制到 Windows，作为 `AI` Profile 的 `icon`；图标内含 16–256px 九档尺寸，小尺寸经过像素对齐以保证页签显示清晰。
-
-维护图标时可运行 `python3 scripts/generate_icon.py` 重新生成；该维护脚本需要 Pillow，但启动器运行时不依赖它。
+4. `icon` 是可选字段，可按机器自行添加，不需要提交到仓库。
 
 从 `AI` Profile 进入时，启动器会尝试在同一窗口创建对应 Agent 页签；没有匹配 Profile 或 `wt.exe` 时，会留在当前终端启动。
 

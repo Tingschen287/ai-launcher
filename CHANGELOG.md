@@ -1,9 +1,5 @@
 # Changelog
 
-## Unreleased
-
-- Add a pixel-aligned, multi-resolution Windows Terminal icon and its deterministic generator.
-
 ## 0.5.0 - 2026-08-26
 
 - Replace the separate Resume action row with `New | Resume` title tabs.
