@@ -109,6 +109,19 @@ class LauncherTests(unittest.TestCase):
                 )
             self.assertEqual(result, str(child))
 
+    def test_status_uses_agent_proxy_policy(self):
+        with patch.object(launcher.os.path, "exists", return_value=True), \
+                patch.dict(launcher.os.environ, {"WSL_DISTRO_NAME": "TestLinux"}):
+            self.assertEqual(launcher.status_right(), "TestLinux · proxy-on ✓")
+            self.assertEqual(
+                launcher.status_right({"proxy": True}),
+                "TestLinux · 代理 ✓",
+            )
+            self.assertEqual(
+                launcher.status_right({"proxy": False}),
+                "TestLinux · 直连",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

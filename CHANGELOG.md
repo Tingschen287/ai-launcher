@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 - 2026-08-26
+
+- Show each Agent's actual proxy policy in directory views.
+- Label global proxy availability separately from per-Agent routing.
+
 ## 0.2.0 - 2026-08-26
 
 - Replace the single-line manual path prompt with live child-directory suggestions.

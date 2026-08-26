@@ -28,7 +28,7 @@ import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 
 HOME = os.path.expanduser("~")
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 CONF = os.environ.get(
     "AI_LAUNCHER_CONFIG",
     os.path.join(HOME, ".config", "ai-launcher", "agents.toml"),
@@ -447,9 +447,15 @@ def pad_ansi(s: str, w: int) -> str:
     return s + " " * max(w - dwidth(strip_ansi(s)), 0)
 
 
-def status_right():
+def status_right(agent=None):
     distro = os.environ.get("WSL_DISTRO_NAME", "linux")
-    proxy = "代理 ✓" if os.path.exists(os.path.join(HOME, ".proxy.sh")) else "无代理"
+    proxy_available = os.path.exists(os.path.join(HOME, ".proxy.sh"))
+    if agent is None:
+        proxy = "proxy-on ✓" if proxy_available else "proxy-on —"
+    elif not agent.get("proxy", False):
+        proxy = "直连"
+    else:
+        proxy = "代理 ✓" if proxy_available else "代理未配置"
     return f"{distro} · {proxy}"
 
 
@@ -506,7 +512,7 @@ def pick_path(term, agent, initial=""):
                     for item in suggestions)
         state = "目录 ✓" if valid else f"{len(suggestions)} 个匹配"
         title = f"{FG(agent['color'])}{agent['name']}{RESET}{DIM} › 输入目录{RESET}"
-        geom = draw(title, state, rows, sel,
+        geom = draw(title, f"{agent['key']} · {status_right(agent)} · {state}", rows, sel,
                     "↑↓ 选 · Tab/→ 下级 · Enter 确认 · Ctrl+U 清空 · Esc 返回")
         kind, *rest = term.key()
         if kind == "mouse":
@@ -548,7 +554,7 @@ def pick_dir(term, agent, allow_back):
     fill_git(items)
     sel = 0
     title = f"{FG(agent['color'])}{agent['name']}{RESET}{DIM} › 选目录{RESET}"
-    right = f"{agent['key']} · {status_right()}"
+    right = f"{agent['key']} · {status_right(agent)}"
     hint = ("Esc 返回 · " if allow_back else "") + \
            "Enter 进 · / 从根输入 · e 浏览当前 · q 退出"
     while True:
