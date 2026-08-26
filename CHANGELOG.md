@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1 - 2026-08-26
+
+- Change Resume from automatic latest-session continuation to each Agent's native session picker.
+- Use Grok's `/resume` TUI command to open its interactive Resume page directly.
+
 ## 0.4.0 - 2026-08-26
 
 - Add config-driven resume commands for every bundled Agent.

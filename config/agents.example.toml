@@ -10,7 +10,7 @@ name = "Claude 官方"
 color = "#cc785c"
 note = "Anthropic 直连"
 cmd = "claude"
-resume_args = ["--continue"]
+resume_args = ["--resume"]
 proxy = true
 env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-official" }
 unset = ["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
@@ -22,7 +22,7 @@ name = "Claude Switch"
 color = "#8b5cf6"
 note = "CC-Switch 服务商"
 cmd = "claude"
-resume_args = ["--continue"]
+resume_args = ["--resume"]
 proxy = false
 env = { CLAUDE_CONFIG_DIR = "$HOME/.claude" }
 unset = ["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
@@ -34,7 +34,7 @@ name = "Codex"
 color = "#e8e6e1"
 note = "OpenAI"
 cmd = "codex"
-resume_args = ["resume", "--last"]
+resume_args = ["resume"]
 proxy = true
 path_prepend = ["$HOME/.npm-global/bin"]
 
@@ -45,7 +45,7 @@ name = "Grok"
 color = "#736cd3"
 note = "xAI"
 cmd = "grok"
-resume_args = ["--continue"]
+resume_args = ["/resume"]
 proxy = true
 path_prepend = ["$HOME/.grok/bin", "$HOME/.local/bin"]
 
@@ -56,6 +56,6 @@ name = "Kimi"
 color = "#047afe"
 note = "月之暗面 · 不走代理"
 cmd = "kimi"
-resume_args = ["--continue"]
+resume_args = ["--session"]
 proxy = false
 path_prepend = ["$HOME/.kimi-code/bin", "$HOME/.local/bin"]

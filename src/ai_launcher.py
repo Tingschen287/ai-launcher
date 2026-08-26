@@ -5,7 +5,7 @@
   ai                    交互：先选 agent，再选目录
   ai cco                指定 agent，只选目录
   ai cco ~/dev/ai       直接启动，不进菜单
-  ai --resume cco DIR   恢复该目录最近会话
+  ai --resume cco DIR   在该目录打开 Resume 选择页
   ai --list             打印 agent 清单
   ai --shell            直接开 shell（选完目录）
 
@@ -29,7 +29,7 @@ import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 
 HOME = os.path.expanduser("~")
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 CONF = os.environ.get(
     "AI_LAUNCHER_CONFIG",
     os.path.join(HOME, ".config", "ai-launcher", "agents.toml"),
@@ -589,7 +589,7 @@ def pick_dir(term, agent, allow_back):
     title = f"{FG(agent['color'])}{agent['name']}{RESET}{DIM} › 选目录{RESET}"
     right = f"{agent['key']} · {status_right(agent)}"
     hint = ("Esc 返回 · " if allow_back else "") + \
-           "Enter 新会话 · r 恢复 · / 路径 · q 退出"
+           "Enter 新会话 · r 会话选择 · / 路径 · q 退出"
     while True:
         rows = [(True, dir_row(it, i + 1)) for i, it in enumerate(items)]
         rows.append((False, lambda _: ""))
@@ -597,7 +597,7 @@ def pick_dir(term, agent, allow_back):
         if can_resume:
             resume_idx = len(items)
             rows.append((True, action_row(
-                "↻", "恢复所选目录最近会话", shorten(items[path_sel]["path"]),
+                "↻", "打开 Resume 会话选择", shorten(items[path_sel]["path"]),
                 agent["color"])))
         manual_idx = len(items) + (1 if can_resume else 0)
         rows.append((True, action_row(

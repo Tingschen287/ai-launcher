@@ -87,7 +87,7 @@ class LauncherTests(unittest.TestCase):
                 "name": "Codex",
                 "color": "#ffffff",
                 "default_dir": directory,
-                "resume_args": ["resume", "--last"],
+                "resume_args": ["resume"],
             }
             geometry = {"rows": {}, "bottom": 1, "left": 0}
             with patch.object(launcher, "dir_candidates", return_value=[item]), \
@@ -104,7 +104,7 @@ class LauncherTests(unittest.TestCase):
                 "name": "Codex",
                 "color": "#ffffff",
                 "default_dir": directory,
-                "resume_args": ["resume", "--last"],
+                "resume_args": ["resume"],
             }
             geometry = {"rows": {10: 1}, "left": 0, "width": 20}
             events = EventTerm(("mouse", 10, 5, "click"))
@@ -161,14 +161,14 @@ class LauncherTests(unittest.TestCase):
     def test_build_script_uses_agent_specific_resume_arguments(self):
         agent = {
             "cmd": "codex",
-            "resume_args": ["resume", "--last"],
+            "resume_args": ["resume"],
             "proxy": True,
             "path_prepend": [],
             "unset": [],
             "env": {},
         }
         script = launcher.build_script(agent, "/tmp/project", resume=True)
-        self.assertIn('codex resume --last "$@"', script)
+        self.assertIn('codex resume "$@"', script)
 
     def test_direct_resume_cli_reaches_launch_mode(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -176,7 +176,7 @@ class LauncherTests(unittest.TestCase):
                 "key": "codex",
                 "name": "Codex",
                 "cmd": "codex",
-                "resume_args": ["resume", "--last"],
+                "resume_args": ["resume"],
             }
             argv = ["ai", "--resume", "codex", directory]
             with patch.object(launcher, "load_agents", return_value=[agent]), \
@@ -196,11 +196,11 @@ class LauncherTests(unittest.TestCase):
             config = tomllib.load(handle)
         actual = {agent["key"]: agent["resume_args"] for agent in config["agent"]}
         self.assertEqual(actual, {
-            "cco": ["--continue"],
-            "ccs": ["--continue"],
-            "codex": ["resume", "--last"],
-            "grok": ["--continue"],
-            "kimi": ["--continue"],
+            "cco": ["--resume"],
+            "ccs": ["--resume"],
+            "codex": ["resume"],
+            "grok": ["/resume"],
+            "kimi": ["--session"],
         })
 
     def test_path_suggestions_filter_directories_and_preserve_input(self):

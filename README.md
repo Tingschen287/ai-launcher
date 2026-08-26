@@ -23,7 +23,7 @@ A keyboard-first terminal launcher for Claude Code, Codex CLI, Grok, Kimi, and o
 - 手动输入路径时实时展示和筛选下级目录
 - TOML 驱动的 Agent 注册表
 - 每个 Agent 独立的颜色、环境变量、PATH、代理策略和默认目录
-- 按 Agent 各自的 CLI 语法恢复所选目录最近会话
+- 按 Agent 各自的 CLI 语法打开原生 Resume 会话选择页
 - Windows Terminal 隐藏 Profile 页签交接
 - CLI 直达和参数透传
 - Agent 退出后保留工作 Shell，便于查看错误与继续操作
@@ -73,16 +73,16 @@ ai --version               查看版本
 
 ### 恢复会话
 
-在目录页中，`Enter` 启动新会话，`r` 恢复当前选中目录的最近会话。页面底部也提供可悬停、可点击的“恢复所选目录最近会话”操作行。
+在目录页中，`Enter` 启动新会话，`r` 打开当前 Agent 的原生 Resume 会话选择页。页面底部也提供可悬停、可点击的“打开 Resume 会话选择”操作行。所选目录用于限定当前工作区，具体恢复哪个会话由 Agent 自己的 Picker 决定。
 
 各 Agent 使用自己的续接语法，统一由 `resume_args` 配置：
 
 | Agent | 实际命令 |
 |---|---|
-| Claude 官方 / CC-Switch | `claude --continue` |
-| Codex | `codex resume --last` |
-| Grok | `grok --continue` |
-| Kimi | `kimi --continue` |
+| Claude 官方 / CC-Switch | `claude --resume` |
+| Codex | `codex resume` |
+| Grok | `grok "/resume"` |
+| Kimi | `kimi --session` |
 
 ### 路径补全
 
@@ -108,7 +108,7 @@ name = "Codex"
 color = "#e8e6e1"
 note = "OpenAI"
 cmd = "codex"
-resume_args = ["resume", "--last"]
+resume_args = ["resume"]
 proxy = true
 path_prepend = ["$HOME/.npm-global/bin"]
 env = {}
@@ -123,7 +123,7 @@ wt_profile = "Codex (WSL)"
 | `key` | CLI 短名与数字菜单标识 |
 | `name` | 菜单显示名称 |
 | `cmd` | 最终执行的本机原生命令 |
-| `resume_args` | 恢复当前目录最近会话时追加到 `cmd` 后的参数数组 |
+| `resume_args` | 打开该 Agent 原生 Resume 选择页时追加到 `cmd` 后的参数数组 |
 | `color` | 菜单强调色，格式为 `#RRGGBB` |
 | `note` | 菜单备注 |
 | `proxy` | `true` 显式运行 `proxy-on --quiet`；`false` 清除继承的代理变量，保证当前 Agent 直连 |
