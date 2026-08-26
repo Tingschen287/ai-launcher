@@ -1,0 +1,56 @@
+# AI Launcher agent registry.
+# Copy to ~/.config/ai-launcher/agents.toml and adjust for this machine.
+
+default_dir = "$HOME/dev"
+
+[[agent]]
+key = "cco"
+wt_profile = "Claude Official (WSL)"
+name = "Claude 官方"
+color = "#cc785c"
+note = "Anthropic 直连"
+cmd = "claude"
+proxy = true
+env = { CLAUDE_CONFIG_DIR = "$HOME/.claude-official" }
+unset = ["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
+
+[[agent]]
+key = "ccs"
+wt_profile = "Claude CC-Switch (WSL)"
+name = "Claude Switch"
+color = "#8b5cf6"
+note = "CC-Switch 服务商"
+cmd = "claude"
+proxy = true
+env = { CLAUDE_CONFIG_DIR = "$HOME/.claude" }
+unset = ["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
+
+[[agent]]
+key = "codex"
+wt_profile = "Codex (WSL)"
+name = "Codex"
+color = "#e8e6e1"
+note = "OpenAI"
+cmd = "codex"
+proxy = true
+path_prepend = ["$HOME/.npm-global/bin"]
+
+[[agent]]
+key = "grok"
+wt_profile = "Grok (WSL)"
+name = "Grok"
+color = "#736cd3"
+note = "xAI"
+cmd = "grok"
+proxy = true
+path_prepend = ["$HOME/.grok/bin", "$HOME/.local/bin"]
+
+[[agent]]
+key = "kimi"
+wt_profile = "Kimi (WSL)"
+name = "Kimi"
+color = "#047afe"
+note = "月之暗面 · 不走代理"
+cmd = "kimi"
+proxy = false
+path_prepend = ["$HOME/.kimi-code/bin", "$HOME/.local/bin"]

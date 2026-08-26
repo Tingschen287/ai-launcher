@@ -1,0 +1,46 @@
+// Merge these objects into profiles.list in Windows Terminal settings.json.
+// Replace <DISTRO> and <WSL_USER>. Generate new GUIDs if any collide locally.
+[
+  {
+    "name": "AI",
+    "guid": "{2aa2b4a4-7902-5cc2-b67d-cb7db394ba3f}",
+    "commandline": "wsl.exe -d <DISTRO> -u <WSL_USER> --cd ~ -- bash -lc \"AI_LAUNCHER_HANDOFF=1 ~/.local/bin/ai\"",
+    "closeOnExit": "graceful",
+    "hidden": false
+  },
+  {
+    "name": "Claude Official (WSL)",
+    "tabTitle": "Claude Official (WSL)",
+    "guid": "{7c3d9a5e-8b2f-4d6a-9e1c-5a8b3f7d2e9c}",
+    "commandline": "wsl.exe -d <DISTRO> -u <WSL_USER> --cd ~ -- bash -lc \"~/.local/bin/ai cco\"",
+    "hidden": true
+  },
+  {
+    "name": "Claude CC-Switch (WSL)",
+    "tabTitle": "Claude CC-Switch (WSL)",
+    "guid": "{2f6b8e1a-5c9d-4e3f-8a7b-1d4c6f2e9b53}",
+    "commandline": "wsl.exe -d <DISTRO> -u <WSL_USER> --cd ~ -- bash -lc \"~/.local/bin/ai ccs\"",
+    "hidden": true
+  },
+  {
+    "name": "Codex (WSL)",
+    "tabTitle": "Codex (WSL)",
+    "guid": "{9e7f9d3c-8f31-4f88-91f2-7cbf9222c0de}",
+    "commandline": "wsl.exe -d <DISTRO> -u <WSL_USER> --cd ~ -- bash -lc \"~/.local/bin/ai codex\"",
+    "hidden": true
+  },
+  {
+    "name": "Grok (WSL)",
+    "tabTitle": "Grok (WSL)",
+    "guid": "{3533db90-4ea3-4052-88db-e1b373767624}",
+    "commandline": "wsl.exe -d <DISTRO> -u <WSL_USER> --cd ~ -- bash -lc \"~/.local/bin/ai grok\"",
+    "hidden": true
+  },
+  {
+    "name": "Kimi (WSL)",
+    "tabTitle": "Kimi (WSL)",
+    "guid": "{0c139e6d-c5ba-41a9-93d2-4e7a6f57f488}",
+    "commandline": "wsl.exe -d <DISTRO> -u <WSL_USER> --cd ~ -- bash -lc \"~/.local/bin/ai kimi\"",
+    "hidden": true
+  }
+]
