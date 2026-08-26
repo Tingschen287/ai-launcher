@@ -18,6 +18,7 @@ A keyboard-first terminal launcher for Claude Code, Codex CLI, Grok, Kimi, and o
 ## 功能
 
 - 键盘、数字键和鼠标选择 Agent
+- 可点击行提供实时鼠标悬停高亮反馈
 - 最近目录、Git 分支与工作区状态
 - 手动输入路径时实时展示和筛选下级目录
 - TOML 驱动的 Agent 注册表

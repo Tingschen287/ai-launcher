@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0 - 2026-08-26
+
+- Add mouse-motion tracking and hover highlighting to every clickable row.
+- Preserve keyboard selection while providing pointer-specific visual feedback.
+
 ## 0.2.2 - 2026-08-26
 
 - Make proxy routing explicit and process-local for every Agent launch.

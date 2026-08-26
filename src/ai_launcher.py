@@ -28,7 +28,7 @@ import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 
 HOME = os.path.expanduser("~")
-VERSION = "0.2.2"
+VERSION = "0.3.0"
 CONF = os.environ.get(
     "AI_LAUNCHER_CONFIG",
     os.path.join(HOME, ".config", "ai-launcher", "agents.toml"),
@@ -233,13 +233,13 @@ class Term:
     def __enter__(self):
         self.saved = termios.tcgetattr(self.fd)
         tty.setraw(self.fd)
-        # 1049 备用屏 · 25l 隐藏光标 · 1000 点击上报 · 1006 SGR 编码
-        sys.stdout.write(f"{ESC}[?1049h{ESC}[?25l{ESC}[?1000h{ESC}[?1006h")
+        # 1049 备用屏 · 25l 隐藏光标 · 1003 移动上报 · 1006 SGR 编码
+        sys.stdout.write(f"{ESC}[?1049h{ESC}[?25l{ESC}[?1003h{ESC}[?1006h")
         sys.stdout.flush()
         return self
 
     def __exit__(self, *_):
-        sys.stdout.write(f"{ESC}[?1006l{ESC}[?1000l{ESC}[?25h{ESC}[?1049l")
+        sys.stdout.write(f"{ESC}[?1006l{ESC}[?1003l{ESC}[?25h{ESC}[?1049l")
         sys.stdout.flush()
         termios.tcsetattr(self.fd, termios.TCSADRAIN, self.saved)
 
@@ -286,6 +286,8 @@ class Term:
                     return ("key", "up")
                 if btn == 65:
                     return ("key", "down")
+                if btn & 32 and updown == "M":
+                    return ("mouse", row, col, "move")
                 if btn == 0 and updown == "M":
                     return ("mouse", row, col, "click")
                 return ("key", "")
@@ -463,17 +465,22 @@ def status_right(agent=None):
 
 def pick_agent(term, agents):
     sel = 0
+    hover = None
     while True:
         rows = [(True, agent_row(a, i + 1)) for i, a in enumerate(agents)]
-        geom = draw("◇ AI 启动器", status_right(), rows, sel,
+        visual_sel = hover if hover is not None else sel
+        geom = draw("◇ AI 启动器", status_right(), rows, visual_sel,
                     "↑↓/鼠标 选 · Enter 进 · 1-9 直达 · s 纯 Shell · q 退出")
         kind, *rest = term.key()
         if kind == "mouse":
-            row, col, _ = rest
+            row, col, action = rest
             i = hit(geom, row, col)
-            if i is not None:
+            if action == "move":
+                hover = i
+            elif action == "click" and i is not None:
                 return agents[i]
             continue
+        hover = None
         k = rest[0]
         if k in ("up", "k"):
             sel = (sel - 1) % len(agents)
@@ -493,6 +500,7 @@ def pick_path(term, agent, initial=""):
     """实时路径输入：展示匹配子目录，并支持键盘或鼠标完成选择。"""
     buf = initial
     sel = -1
+    hover = None
     error = ""
     while True:
         suggestions = path_suggestions(buf)
@@ -512,15 +520,19 @@ def pick_path(term, agent, initial=""):
                     for item in suggestions)
         state = "目录 ✓" if valid else f"{len(suggestions)} 个匹配"
         title = f"{FG(agent['color'])}{agent['name']}{RESET}{DIM} › 输入目录{RESET}"
-        geom = draw(title, f"{agent['key']} · {status_right(agent)} · {state}", rows, sel,
+        visual_sel = hover if hover is not None else sel
+        geom = draw(title, f"{agent['key']} · {status_right(agent)} · {state}", rows, visual_sel,
                     "↑↓ 选 · Tab/→ 下级 · Enter 确认 · Ctrl+U 清空 · Esc 返回")
         kind, *rest = term.key()
         if kind == "mouse":
-            row, col, _ = rest
+            row, col, action = rest
             i = hit(geom, row, col)
-            if i is not None and i < len(suggestions):
+            if action == "move":
+                hover = i
+            elif action == "click" and i is not None and i < len(suggestions):
                 return suggestions[i]["path"]
             continue
+        hover = None
         k = rest[0]
         if k == "up" and suggestions:
             sel = len(suggestions) - 1 if sel < 0 else (sel - 1) % len(suggestions)
@@ -553,6 +565,7 @@ def pick_dir(term, agent, allow_back):
     items = dir_candidates(agent)
     fill_git(items)
     sel = 0
+    hover = None
     title = f"{FG(agent['color'])}{agent['name']}{RESET}{DIM} › 选目录{RESET}"
     right = f"{agent['key']} · {status_right(agent)}"
     hint = ("Esc 返回 · " if allow_back else "") + \
@@ -561,14 +574,18 @@ def pick_dir(term, agent, allow_back):
         rows = [(True, dir_row(it, i + 1)) for i, it in enumerate(items)]
         rows.append((False, lambda _: ""))
         rows.append((False, lambda _: f"    {DIM} /{RESET}  {MUTED}输入其它路径…{RESET}"))
-        geom = draw(title, right, rows, sel, hint)
+        visual_sel = hover if hover is not None else sel
+        geom = draw(title, right, rows, visual_sel, hint)
         kind, *rest = term.key()
         if kind == "mouse":
-            row, col, _ = rest
+            row, col, action = rest
             i = hit(geom, row, col)
-            if i is not None:
+            if action == "move":
+                hover = i
+            elif action == "click" and i is not None:
                 return items[i]["path"]
             continue
+        hover = None
         k = rest[0]
         if k in ("up", "k"):
             sel = (sel - 1) % len(items)

@@ -22,6 +22,22 @@ class FakeTerm:
         return "key", next(self.keys)
 
 
+class EventTerm:
+    def __init__(self, *events):
+        self.events = iter(events)
+
+    def key(self):
+        return next(self.events)
+
+
+class SequenceTerm:
+    def __init__(self, chars):
+        self.chars = iter(chars)
+
+    def _getch(self, timeout=None):
+        return next(self.chars, None)
+
+
 class LauncherTests(unittest.TestCase):
     def test_example_config_is_valid_and_has_unique_keys(self):
         with (ROOT / "config" / "agents.example.toml").open("rb") as handle:
@@ -62,6 +78,23 @@ class LauncherTests(unittest.TestCase):
                     patch.object(launcher, "draw", return_value=geometry):
                 result = launcher.pick_dir(FakeTerm("", "\r"), agent, allow_back=False)
             self.assertEqual(result, directory)
+
+    def test_sgr_mouse_motion_is_reported_as_hover_event(self):
+        sequence = [launcher.ESC, "["] + list("<35;12;7M")
+        event = launcher.Term.key(SequenceTerm(sequence))
+        self.assertEqual(event, ("mouse", 7, 12, "move"))
+
+    def test_agent_picker_renders_hovered_row(self):
+        agents = [
+            {"key": "a", "name": "A", "color": "#ffffff", "note": ""},
+            {"key": "b", "name": "B", "color": "#ffffff", "note": ""},
+        ]
+        geometry = {"rows": {10: 1}, "left": 0, "width": 20}
+        events = EventTerm(("mouse", 10, 5, "move"), ("key", "q"))
+        with patch.object(launcher, "draw", return_value=geometry) as draw:
+            result = launcher.pick_agent(events, agents)
+        self.assertIsNone(result)
+        self.assertEqual(draw.call_args_list[1].args[3], 1)
 
     def test_build_script_passes_arguments_to_native_cli(self):
         agent = {
