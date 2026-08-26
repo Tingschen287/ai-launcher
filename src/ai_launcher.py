@@ -28,7 +28,7 @@ import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 
 HOME = os.path.expanduser("~")
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 CONF = os.environ.get(
     "AI_LAUNCHER_CONFIG",
     os.path.join(HOME, ".config", "ai-launcher", "agents.toml"),
@@ -594,6 +594,9 @@ def pick_dir(term, agent, allow_back):
 def build_script(agent, target):
     q = shlex.quote(target)
     lines = [
+        # .proxy.sh 会在 source 时自动 proxy-on；先关掉自动行为，再由当前
+        # agent 的 proxy 策略显式决定。环境变量只影响本进程树。
+        'export WSL_PROXY_AUTO=0',
         '[ -f "$HOME/.proxy.sh" ] && source "$HOME/.proxy.sh"',
         '[ -f "$HOME/.npm-path.sh" ] && source "$HOME/.npm-path.sh"',
         'export PATH="$HOME/.local/bin:$PATH"',
@@ -609,6 +612,10 @@ def build_script(agent, target):
         lines.append(
             'if command -v proxy-on >/dev/null 2>&1; then proxy-on --quiet '
             '|| printf "\\033[33mproxy-on 失败，继续无代理\\033[0m\\n"; fi')
+    else:
+        lines.append(
+            'unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy '
+            'ALL_PROXY all_proxy NO_PROXY no_proxy')
     cmd = agent["cmd"]
     lines += [
         f'if ! command -v {cmd} >/dev/null 2>&1; then',

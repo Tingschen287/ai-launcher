@@ -21,7 +21,7 @@ name = "Claude Switch"
 color = "#8b5cf6"
 note = "CC-Switch 服务商"
 cmd = "claude"
-proxy = true
+proxy = false
 env = { CLAUDE_CONFIG_DIR = "$HOME/.claude" }
 unset = ["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
 

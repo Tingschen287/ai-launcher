@@ -108,7 +108,7 @@ wt_profile = "Codex (WSL)"
 | `cmd` | 最终执行的本机原生命令 |
 | `color` | 菜单强调色，格式为 `#RRGGBB` |
 | `note` | 菜单备注 |
-| `proxy` | 启动前是否尝试运行 `proxy-on --quiet` |
+| `proxy` | `true` 显式运行 `proxy-on --quiet`；`false` 清除继承的代理变量，保证当前 Agent 直连 |
 | `path_prepend` | 启动前追加到 PATH 前端的目录 |
 | `env` / `unset` | 启动前设置或清除的环境变量 |
 | `default_dir` | Agent 专属默认目录 |

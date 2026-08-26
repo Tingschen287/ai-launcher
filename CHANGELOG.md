@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2 - 2026-08-26
+
+- Make proxy routing explicit and process-local for every Agent launch.
+- Prevent `.proxy.sh` auto-enable behavior from overriding `proxy = false`.
+- Configure Claude via CC-Switch to use a direct connection.
+
 ## 0.2.1 - 2026-08-26
 
 - Show each Agent's actual proxy policy in directory views.

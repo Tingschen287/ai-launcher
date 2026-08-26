@@ -74,6 +74,27 @@ class LauncherTests(unittest.TestCase):
         script = launcher.build_script(agent, "/tmp/project")
         self.assertIn('codex "$@"', script)
         self.assertIn("cd /tmp/project", script)
+        self.assertIn("export WSL_PROXY_AUTO=0", script)
+        self.assertIn("unset HTTP_PROXY HTTPS_PROXY", script)
+        self.assertNotIn("then proxy-on --quiet", script)
+
+    def test_build_script_explicitly_enables_proxy_when_configured(self):
+        agent = {
+            "cmd": "codex",
+            "proxy": True,
+            "path_prepend": [],
+            "unset": [],
+            "env": {},
+        }
+        script = launcher.build_script(agent, "/tmp/project")
+        self.assertIn("export WSL_PROXY_AUTO=0", script)
+        self.assertIn("then proxy-on --quiet", script)
+
+    def test_cc_switch_example_is_direct(self):
+        with (ROOT / "config" / "agents.example.toml").open("rb") as handle:
+            config = tomllib.load(handle)
+        agents = {agent["key"]: agent for agent in config["agent"]}
+        self.assertFalse(agents["ccs"]["proxy"])
 
     def test_path_suggestions_filter_directories_and_preserve_input(self):
         with tempfile.TemporaryDirectory() as directory:
