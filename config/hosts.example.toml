@@ -1,0 +1,35 @@
+# Host Deck UI / orchestration metadata.
+# Copy to ~/.config/host-deck/hosts.toml and adjust for this machine.
+#
+# Connection facts stay in ~/.ssh/config (HostName, User, Port, IdentityFile,
+# ProxyJump, and the rest). Do not put passwords, keys, or tokens here.
+# Aliases below are examples; they must match Host aliases in ~/.ssh/config.
+
+wt_profile = "SSH (WSL)"
+default_tmux_session = ""
+
+[[host]]
+alias = "example-dev"
+name = "开发机"
+group = "dev"
+color = "#38bdf8"
+favorite = true
+remote_dir = ""
+after_cmd = ""
+tmux_session = "dev"
+
+[[host]]
+alias = "example-staging"
+name = "预发"
+group = "staging"
+color = "#fbbf24"
+favorite = false
+tmux_session = ""
+
+[[host]]
+alias = "example-prod"
+name = "生产"
+group = "prod"
+color = "#f87171"
+favorite = false
+hidden = false

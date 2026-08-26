@@ -7,13 +7,19 @@ WSL/Linux. Windows-native and macOS adapters are roadmap items, not current beha
 
 ## Sources of truth
 
-- Launcher implementation: `src/ai_launcher.py`
-- Shareable configuration: `config/agents.example.toml`
+- Shared TUI: `src/deck_tui.py`
+- Agent Deck: `src/ai_launcher.py`
+- Host Deck: `src/host_deck.py`
+- Shareable configuration: `config/agents.example.toml`, `config/hosts.example.toml`
 - WSL installation: `scripts/install.sh`
 - Windows Terminal example: `integrations/windows-terminal/profiles.example.jsonc`
 
-Do not commit a user's live `agents.toml`, terminal settings, history, credentials,
-tokens, or absolute home-directory paths.
+Do not commit a user's live `agents.toml`, `hosts.toml`, terminal settings, history,
+SSH config, credentials, tokens, or absolute home-directory paths.
+
+Host Deck treats `~/.ssh/config` as the connection source of truth. Its own config
+only stores UI metadata (name, group, color, favorite, remote dir, tmux session).
+Do not save passwords, keys, or tokens. Do not uninstall or rewrite Tabby.
 
 ## Change protocol
 

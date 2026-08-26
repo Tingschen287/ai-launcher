@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2 - 2026-08-26
+
+- Extract shared terminal TUI primitives into `src/deck_tui.py`.
+- Install Agent Deck and Host Deck from the same WSL script, with a shared library directory.
+- Add Host Deck 0.1.0: SSH host picker backed by `~/.ssh/config` and native OpenSSH.
+
 ## 0.5.1 - 2026-08-26
 
 - Rename the user-facing product from AI Launcher to Agent Deck.

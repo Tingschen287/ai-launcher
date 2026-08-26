@@ -42,5 +42,21 @@
     "guid": "{0c139e6d-c5ba-41a9-93d2-4e7a6f57f488}",
     "commandline": "wsl.exe -d <DISTRO> -u <WSL_USER> --cd ~ -- bash -lc \"~/.local/bin/ai kimi\"",
     "hidden": true
+  },
+  {
+    "name": "Host Deck",
+    "guid": "{b0b653ec-5568-576f-883d-7c915ecbe1f4}",
+    "commandline": "wsl.exe -d <DISTRO> -u <WSL_USER> --cd ~ -- bash -lc \"HOST_DECK_HANDOFF=1 ~/.local/bin/host\"",
+    "closeOnExit": "graceful",
+    "hidden": false
+  },
+  {
+    "name": "SSH (WSL)",
+    "tabTitle": "SSH",
+    "guid": "{7cf874fb-ef17-5ded-bc6e-174cb04162b1}",
+    "commandline": "wsl.exe -d <DISTRO> -u <WSL_USER> --cd ~ -- bash -lc \"~/.local/bin/host\"",
+    "suppressApplicationTitle": true,
+    "closeOnExit": "graceful",
+    "hidden": true
   }
 ]

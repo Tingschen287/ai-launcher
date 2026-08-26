@@ -15,6 +15,8 @@ A keyboard-first command deck for Claude Code, Codex CLI, Grok, Kimi, and other 
 
 仓库名称有意保持平台中立。当前版本不会提前声称 Windows 原生或 macOS 已适配。
 
+同仓库还提供兄弟工具 **Host Deck**（命令 `host`）：用同一套 TUI 选择 SSH 主机，再交给本机 OpenSSH。连接参数仍以 `~/.ssh/config` 为准。
+
 ## 功能
 
 - 键盘、数字键和鼠标选择 Agent
@@ -45,8 +47,9 @@ cd ai-launcher
 
 安装脚本会：
 
-- 安装 `src/ai_launcher.py` 到 `~/.local/bin/ai`
-- 仅在配置不存在时创建 `~/.config/ai-launcher/agents.toml`
+- 安装共享 TUI、Agent Deck 和 Host Deck 到 `~/.local/lib/deck/`
+- 把 `~/.local/bin/ai` 和 `~/.local/bin/host` 链过去
+- 仅在配置不存在时创建 `agents.toml` 与 `hosts.toml`
 - 升级时保留已有配置
 
 确认 `~/.local/bin` 已加入 `PATH`，然后运行：
@@ -54,6 +57,8 @@ cd ai-launcher
 ```bash
 ai --list
 ai
+host --list
+host
 ```
 
 ## 使用
@@ -142,7 +147,7 @@ wt_profile = "Codex (WSL)"
 
 ## Windows Terminal
 
-[`integrations/windows-terminal/profiles.example.jsonc`](integrations/windows-terminal/profiles.example.jsonc) 提供一个可见的 `Agent Deck` Profile 和每个 Agent 的隐藏 Profile 示例。
+[`integrations/windows-terminal/profiles.example.jsonc`](integrations/windows-terminal/profiles.example.jsonc) 提供可见的 `Agent Deck` / `Host Deck` Profile，以及各 Agent 与通用 `SSH (WSL)` 的隐藏 Profile 示例。
 
 1. 将示例对象合并进 Windows Terminal `settings.json` 的 `profiles.list`。
 2. 把 `<DISTRO>`、`<WSL_USER>` 替换为本机值。
@@ -150,6 +155,33 @@ wt_profile = "Codex (WSL)"
 4. `icon` 是可选字段，可按机器自行添加，不需要提交到仓库。
 
 从 `Agent Deck` Profile 进入时，启动器会尝试在同一窗口创建对应 Agent 页签；没有匹配 Profile 或 `wt.exe` 时，会留在当前终端启动。
+
+## Host Deck
+
+`host` 负责发现、分组、选择和启动 SSH 连接，不替代 OpenSSH，也不保存凭据。
+
+```text
+host                       选择主机后连接
+host example-dev           直接连接该 Host 别名
+host --attach example-dev  连接后进入或创建 tmux
+host example-dev -- -v     额外参数原样传给 ssh
+host --list                查看发现的主机
+host --version             查看版本
+```
+
+标题栏提供 `Connect | Attach` 两个模式 Tab，默认 `Connect`：
+
+- `Connect`：普通 SSH 连接
+- `Attach`：连接后 `tmux attach`；若配置了 `tmux_session` 则 `tmux new-session -A -s <name>`
+- `Tab`：切换模式；也可以按 `c` / `a`，或直接用鼠标点击标题栏 Tab
+
+主机列表来自 `~/.ssh/config` 的 `Host` 别名（跟随 `Include`，跳过 `*` 等通配）。需要最终连接参数时调用 `ssh -G <alias>`，不自己解析 HostName/User/Port/IdentityFile。
+
+Host Deck 自己的配置位于 `~/.config/host-deck/hosts.toml`，只保存显示名、分组、颜色、收藏、默认远程目录、连接后命令和 tmux 会话名。可用 `HOST_DECK_CONFIG` 覆盖。安装时若该文件不存在，会写入不含主机条目的 bootstrap 配置；完整字段见 [`config/hosts.example.toml`](config/hosts.example.toml)。
+
+从 `Host Deck` Profile 进入时，会在同一窗口用隐藏的 `SSH (WSL)` Profile 打开连接页签，并设置页签标题。连接失败后保留 Shell。选择器页签会留下，方便再连下一台。
+
+Tabby 仍可作为迁移期兜底，安装和卸载都不会改它。
 
 ## 更新与卸载
 

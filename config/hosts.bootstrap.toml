@@ -1,0 +1,7 @@
+# Host Deck UI / orchestration metadata.
+# Connection facts stay in ~/.ssh/config.
+# See config/hosts.example.toml for per-host name/group/color/tmux fields.
+# Do not put passwords, keys, or tokens here.
+
+wt_profile = "SSH (WSL)"
+default_tmux_session = ""

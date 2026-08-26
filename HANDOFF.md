@@ -166,3 +166,11 @@ Host Deck 自己的配置只保存 UI/编排元数据，例如：
 ## 10. 给 Grok 的一句话任务
 
 > 基于 Agent Deck 已验证的“统一入口 + 配置驱动 + 原生 CLI + Windows Terminal 页签交接”模式，先只读盘点本机 SSH 配置，再设计并直接实现 Host Deck v1；以 `~/.ssh/config` 为连接真相，Host Deck 只管理选择、分组、最近记录、Connect/Attach 与 Windows Terminal 交接，不保存凭据、不破坏 Tabby，并在实施前确认 CLI 名称与新仓库位置。
+
+## 11. 实施状态（2026-08-26）
+
+- Host Deck v1 已作为本仓库兄弟工具落地：`src/host_deck.py`，CLI 为 `host`。
+- 共享 TUI 抽到 `src/deck_tui.py`，避免两份难以同步的大文件。
+- 未创建新的 GitHub 远程仓库；需要独立仓库时由用户提供 URL。
+- 本机 WSL `~/.ssh/config` 当时不存在；Windows 侧 OpenSSH 与 Tabby 配置只读盘点，未改动 Tabby。
+- 安装后需把示例里的 `Host Deck` / `SSH (WSL)` Profile 合并进本机 Windows Terminal。
