@@ -1,4 +1,4 @@
-# AI Launcher agent registry.
+# Agent Deck agent registry.
 # Copy to ~/.config/ai-launcher/agents.toml and adjust for this machine.
 
 default_dir = "$HOME/dev"

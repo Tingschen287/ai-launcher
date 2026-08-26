@@ -17,5 +17,5 @@ else
     printf 'Preserved existing config: %s\n' "${config_target}"
 fi
 
-printf 'Installed ai-launcher: %s\n' "${launcher_target}"
+printf 'Installed Agent Deck: %s\n' "${launcher_target}"
 printf 'Run `ai --list` to verify the agent registry.\n'

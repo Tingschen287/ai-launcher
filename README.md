@@ -1,6 +1,6 @@
-# AI Launcher
+# Agent Deck
 
-A keyboard-first terminal launcher for Claude Code, Codex CLI, Grok, Kimi, and other AI coding agents.
+A keyboard-first command deck for Claude Code, Codex CLI, Grok, Kimi, and other AI coding agents.
 
 用一个 `ai` 命令选择 Agent 和工作目录，再调用本机已经安装的原生 CLI。启动器统一管理菜单、目录历史、代理、环境变量、PATH 与 Windows Terminal 页签交接，不替代各家 Agent 本身。
 
@@ -142,14 +142,14 @@ wt_profile = "Codex (WSL)"
 
 ## Windows Terminal
 
-[`integrations/windows-terminal/profiles.example.jsonc`](integrations/windows-terminal/profiles.example.jsonc) 提供一个可见的 `AI` Profile 和每个 Agent 的隐藏 Profile 示例。
+[`integrations/windows-terminal/profiles.example.jsonc`](integrations/windows-terminal/profiles.example.jsonc) 提供一个可见的 `Agent Deck` Profile 和每个 Agent 的隐藏 Profile 示例。
 
 1. 将示例对象合并进 Windows Terminal `settings.json` 的 `profiles.list`。
 2. 把 `<DISTRO>`、`<WSL_USER>` 替换为本机值。
 3. 如 GUID 与本机配置冲突，请重新生成。
 4. `icon` 是可选字段，可按机器自行添加，不需要提交到仓库。
 
-从 `AI` Profile 进入时，启动器会尝试在同一窗口创建对应 Agent 页签；没有匹配 Profile 或 `wt.exe` 时，会留在当前终端启动。
+从 `Agent Deck` Profile 进入时，启动器会尝试在同一窗口创建对应 Agent 页签；没有匹配 Profile 或 `wt.exe` 时，会留在当前终端启动。
 
 ## 更新与卸载
 

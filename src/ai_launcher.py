@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""AI 启动器 —— 一个入口选 agent + 选目录，然后起会话。
+"""Agent Deck —— 一个入口选 agent + 选目录，然后起会话。
 
 用法：
   ai                    交互：先选 agent，再选目录
@@ -29,7 +29,7 @@ import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 
 HOME = os.path.expanduser("~")
-VERSION = "0.5.0"
+VERSION = "0.5.1"
 CONF = os.environ.get(
     "AI_LAUNCHER_CONFIG",
     os.path.join(HOME, ".config", "ai-launcher", "agents.toml"),
@@ -529,7 +529,7 @@ def pick_agent(term, agents):
     while True:
         rows = [(True, agent_row(a, i + 1)) for i, a in enumerate(agents)]
         visual_sel = hover if hover is not None else sel
-        geom = draw("◇ AI 启动器", status_right(), rows, visual_sel,
+        geom = draw("◇ Agent Deck", status_right(), rows, visual_sel,
                     "↑↓/鼠标 选 · Enter 进 · 1-9 直达 · s 纯 Shell · q 退出")
         kind, *rest = term.key()
         if kind == "mouse":
@@ -761,7 +761,7 @@ def wt_handoff(agent, target, passthru, resume=False):
     那 5 个 profile 已设为 hidden：下拉菜单里看不到，但 `wt -p` 仍能拉起。
     """
     if os.environ.get("AI_LAUNCHER_HANDOFF") != "1":
-        return False                      # 不是从 AI tab 进来的，就地起
+        return False                      # 不是从 Agent Deck tab 进来的，就地起
     prof = agent.get("wt_profile")
     if not prof:
         return False
@@ -829,7 +829,7 @@ def main():
         print(__doc__)
         return
     if args and args[0] in ("-V", "--version"):
-        print(f"ai-launcher {VERSION}")
+        print(f"Agent Deck {VERSION}")
         return
     if args and args[0] == "--list":
         for a in agents:

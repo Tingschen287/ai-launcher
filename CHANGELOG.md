@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1 - 2026-08-26
+
+- Rename the user-facing product from AI Launcher to Agent Deck.
+- Rename the visible Windows Terminal profile to Agent Deck while preserving the `ai` command and existing configuration paths.
+
 ## 0.5.0 - 2026-08-26
 
 - Replace the separate Resume action row with `New | Resume` title tabs.

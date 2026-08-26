@@ -2,7 +2,7 @@
 // Replace <DISTRO> and <WSL_USER>. Generate new GUIDs if any collide locally.
 [
   {
-    "name": "AI",
+    "name": "Agent Deck",
     "guid": "{2aa2b4a4-7902-5cc2-b67d-cb7db394ba3f}",
     "commandline": "wsl.exe -d <DISTRO> -u <WSL_USER> --cd ~ -- bash -lc \"AI_LAUNCHER_HANDOFF=1 ~/.local/bin/ai\"",
     "closeOnExit": "graceful",
