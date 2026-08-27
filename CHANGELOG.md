@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.5 - 2026-08-26
+
+- Host Deck 0.3.1: on WSL, connect through Windows OpenSSH so Tabby-imported hosts use the Windows network path.
+- Show a connecting status and a 15s timeout instead of a silent hang.
+
 ## 0.5.4 - 2026-08-26
 
 - Host Deck 0.3.0: import Tabby SSH profiles into `~/.ssh/config` and Host Deck metadata.

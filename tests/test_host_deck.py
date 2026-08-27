@@ -47,6 +47,7 @@ class HostDeckTests(unittest.TestCase):
         host.FAV = str(root / "favorites.txt")
         host.SSH_CONFIG = str(self.ssh_config)
         os.environ["HOST_DECK_SKIP_SSH_G"] = "1"
+        os.environ["HOST_DECK_FORCE_WSL"] = "1"
         os.environ["HOST_DECK_SECRETS_DIR"] = str(root / "secrets")
         host.secrets._HAS_CACHE.clear()
 
@@ -54,6 +55,7 @@ class HostDeckTests(unittest.TestCase):
         for key, value in self.old.items():
             setattr(host, key, value)
         os.environ.pop("HOST_DECK_SKIP_SSH_G", None)
+        os.environ.pop("HOST_DECK_FORCE_WSL", None)
         os.environ.pop("HOST_DECK_SECRETS_DIR", None)
         host.secrets._HAS_CACHE.clear()
 
@@ -124,14 +126,30 @@ class HostDeckTests(unittest.TestCase):
     def test_build_script_keeps_shell_and_passes_ssh_args(self):
         item = host.make_item("box-a")
         script = host.build_script(item, ["-v"])
-        self.assertIn("ssh -v -- box-a", script)
+        self.assertIn("ssh -o ConnectTimeout=15 -v -- box-a", script)
         self.assertIn("exec bash -i", script)
         self.assertIn("ssh 退出码", script)
+
+    def test_windows_backend_uses_ssh_exe_and_user_host(self):
+        os.environ.pop("HOST_DECK_FORCE_WSL", None)
+        item = host.make_item("box-a", {
+            "via": "windows",
+            "hostname": "example.invalid",
+            "user": "linux",
+            "port": "2222",
+        })
+        with patch.object(host, "windows_ssh_exe", return_value="/mnt/c/Windows/System32/OpenSSH/ssh.exe"):
+            argv = host.build_ssh_argv(item, [])
+        self.assertTrue(argv[0].endswith("ssh.exe"))
+        self.assertIn("linux@example.invalid", argv)
+        self.assertIn("-p", argv)
+        self.assertIn("2222", argv)
+        self.assertNotIn("--", argv)
 
     def test_attach_uses_named_tmux_session(self):
         item = host.make_item("box-a", {"tmux_session": "dev", "remote_dir": "/opt/app"})
         argv = host.build_ssh_argv(item, [], attach=True)
-        self.assertEqual(argv[:4], ["ssh", "-t", "--", "box-a"])
+        self.assertEqual(argv[:6], ["ssh", "-o", "ConnectTimeout=15", "-t", "--", "box-a"])
         self.assertIn("tmux new-session -A -s dev", argv[-1])
         self.assertIn("cd /opt/app", argv[-1])
 

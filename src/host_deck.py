@@ -38,7 +38,7 @@ from deck_tui import (
     action_row, fit_row, pad, pad_tail, ago,
 )
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 DEFAULT_COLOR = "#38bdf8"
 CONF = os.environ.get(
     "HOST_DECK_CONFIG",
@@ -227,6 +227,7 @@ def load_config():
             "remote_dir": host.get("remote_dir") or "",
             "after_cmd": host.get("after_cmd") or "",
             "tmux_session": host.get("tmux_session") or "",
+            "via": host.get("via") or "",
         }
     return cfg
 
@@ -299,6 +300,10 @@ def make_item(alias, meta=None, cfg=None, adhoc=False):
         "ts": None,
         "summary": "临时目标" if adhoc else "",
         "adhoc": adhoc,
+        "via": meta.get("via") or "",
+        "hostname": meta.get("hostname") or "",
+        "user": meta.get("user") or "",
+        "port": meta.get("port") or "",
     }
 
 
@@ -364,6 +369,7 @@ def validate_draft(draft):
         "group": group,
         "password": password,
         "color": DEFAULT_COLOR,
+        "via": "windows" if os.environ.get("WSL_DISTRO_NAME") else "",
     }
     return errors, cleaned
 
@@ -408,6 +414,7 @@ def append_host_meta(host):
         f"name = {_toml_quote(host['name'])}",
         f"group = {_toml_quote(host.get('group') or '')}",
         f"color = {_toml_quote(host.get('color') or DEFAULT_COLOR)}",
+        f"via = {_toml_quote(host.get('via') or '')}",
         "",
     ]
     with open(CONF, "a", encoding="utf-8") as handle:
@@ -794,9 +801,107 @@ def build_remote_command(item, attach=False):
     return " && ".join(chunks)
 
 
+def windows_ssh_exe():
+    for path in (
+        shutil.which("ssh.exe"),
+        "/mnt/c/Windows/System32/OpenSSH/ssh.exe",
+    ):
+        if path and os.path.isfile(path):
+            return path
+    return None
+
+
+def wsl_to_windows_path(path: str) -> str:
+    raw = (path or "").replace("\\", "/")
+    match = re.match(r"^/mnt/([a-zA-Z])/(.*)$", raw)
+    if match:
+        return match.group(1).upper() + ":\\" + match.group(2).replace("/", "\\")
+    return path
+
+
+def _win_to_wsl(win_path: str) -> str:
+    raw = win_path.replace("\\", "/")
+    match = re.match(r"^([A-Za-z]):/(.*)$", raw)
+    if match:
+        return f"/mnt/{match.group(1).lower()}/{match.group(2)}"
+    return win_path
+
+
+def ensure_windows_askpass():
+    """把 askpass 拷到 Windows 用户目录，给 ssh.exe 调用。"""
+    win_root, wsl_root = "", ""
+    try:
+        result = subprocess.run(
+            ["cmd.exe", "/c", "echo %LOCALAPPDATA%"],
+            capture_output=True, text=True, timeout=5,
+        )
+        win_root = (result.stdout or "").strip().splitlines()[-1].strip()
+    except Exception:
+        win_root = ""
+    if win_root and ":\\" in win_root:
+        wsl_root = _win_to_wsl(win_root)
+    else:
+        for path in glob.glob("/mnt/c/Users/*/AppData/Local"):
+            name = path.split("/")[4]
+            if name not in ("Public", "Default", "Default User", "All Users"):
+                wsl_root = path
+                win_root = f"C:\\Users\\{name}\\AppData\\Local"
+                break
+    if not wsl_root or not os.path.isdir(os.path.dirname(wsl_root)):
+        return ""
+    dest_dir = os.path.join(wsl_root, "HostDeck")
+    os.makedirs(dest_dir, exist_ok=True)
+    src_dir = _HERE
+    for name in ("host_askpass.ps1", "host_askpass.cmd"):
+        src = os.path.join(src_dir, name)
+        dst = os.path.join(dest_dir, name)
+        if os.path.isfile(src):
+            shutil.copy2(src, dst)
+    return win_root.rstrip("\\") + "\\HostDeck\\host_askpass.cmd"
+
+
+def use_windows_ssh(item):
+    if os.environ.get("HOST_DECK_FORCE_WSL") == "1":
+        return False
+    via = (item.get("via") or "").lower()
+    if via == "wsl":
+        return False
+    exe = windows_ssh_exe()
+    if not exe:
+        return False
+    if via == "windows":
+        return True
+    return bool(os.environ.get("WSL_DISTRO_NAME"))
+
+
+def connection_target(item):
+    params = {} if os.environ.get("HOST_DECK_SKIP_SSH_G") == "1" else ssh_g(item["alias"])
+    hostname = params.get("hostname") or item.get("hostname") or item["alias"]
+    user = params.get("user") or item.get("user") or ""
+    port = params.get("port") or item.get("port") or "22"
+    return hostname, user, str(port)
+
+
 def build_ssh_argv(item, passthru, attach=False):
     remote = build_remote_command(item, attach)
-    argv = ["ssh"]
+    if use_windows_ssh(item):
+        exe = windows_ssh_exe()
+        hostname, user, port = connection_target(item)
+        argv = [
+            exe,
+            "-o", "ConnectTimeout=15",
+            "-o", "StrictHostKeyChecking=accept-new",
+        ]
+        if port and port != "22":
+            argv += ["-p", port]
+        if remote:
+            argv.append("-t")
+        argv.extend(passthru)
+        argv.append(f"{user}@{hostname}" if user else hostname)
+        if remote:
+            argv.append(remote)
+        return argv
+    argv = ["ssh", "-o", "ConnectTimeout=15"]
     argv.extend(passthru)
     if remote:
         argv.append("-t")
@@ -816,16 +921,28 @@ def build_script(item, passthru, attach=False, use_askpass=None):
     quoted = " ".join(shlex.quote(part) for part in argv)
     title = tab_title(item, attach).replace("\x1b", "").replace("\x07", "")
     alias = item["alias"]
+    windows = use_windows_ssh(item)
     if use_askpass is None:
         use_askpass = secrets.has_password(alias)
+    road = "Windows OpenSSH" if windows else "WSL OpenSSH"
     lines = [
         f"printf '\\033]0;{title}\\007'",
-        f"printf '  {('↻ ' if attach else '')}ssh {alias}\\n'",
-        'if ! command -v ssh >/dev/null 2>&1; then',
-        '  printf "\\033[31m未找到命令 ssh\\033[0m\\n"; exec bash -i',
+        f"printf '正在连接 {alias}（{road}）…\\n'",
+        'if ! command -v ssh >/dev/null 2>&1 && ! command -v ssh.exe >/dev/null 2>&1; then',
+        '  printf "\\033[31m未找到 ssh / ssh.exe\\033[0m\\n"; exec bash -i',
         'fi',
     ]
-    if use_askpass:
+    if use_askpass and windows:
+        helper = ensure_windows_askpass()
+        if helper:
+            lines += [
+                f"export HOST_DECK_ASKPASS_ALIAS={shlex.quote(alias)}",
+                "export WSLENV=HOST_DECK_ASKPASS_ALIAS/u",
+                f"export SSH_ASKPASS={shlex.quote(helper)}",
+                "export SSH_ASKPASS_REQUIRE=force",
+                'export DISPLAY="${DISPLAY:-:0}"',
+            ]
+    elif use_askpass:
         helper = shlex.quote(askpass_path())
         lines += [
             f"export HOST_DECK_ASKPASS=1",
@@ -845,6 +962,7 @@ def build_script(item, passthru, attach=False, use_askpass=None):
         'if [ "$code" -ne 0 ]; then',
         f'  printf "\\n\\033[31mssh 退出码 $code\\033[0m  '
         f'\\033[33mshell 已保留，目标 {alias}\\033[0m\\n"',
+        f'  printf "\\033[33m连不上时：WSL 网络到不了这台机器，Host Deck 会改走 Windows ssh.exe。\\033[0m\\n"',
         "fi",
         "exec bash -i",
     ]

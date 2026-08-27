@@ -184,7 +184,7 @@ host --version             查看版本
 
 Host Deck 自己的配置位于 `~/.config/host-deck/hosts.toml`，只保存显示名、分组、颜色、收藏、默认远程目录、连接后命令和 tmux 会话名。可用 `HOST_DECK_CONFIG` 覆盖。安装时若该文件不存在，会写入不含主机条目的 bootstrap 配置；完整字段见 [`config/hosts.example.toml`](config/hosts.example.toml)。不要把密码写进这个文件。
 
-从 `Host Deck` Profile 进入时，会在同一窗口用隐藏的 `SSH (WSL)` Profile 打开连接页签，并设置页签标题。连接失败后保留 Shell。选择器页签会留下，方便再连下一台。
+从 `Host Deck` Profile 进入时，会在同一窗口用隐藏的 `SSH (WSL)` Profile 打开连接页签，并设置页签标题。在 WSL 里默认走 Windows 的 `ssh.exe`（和 Tabby 同一套网络）；个别只要 WSL 网络的主机可在 `hosts.toml` 里设 `via = "wsl"`。连接失败后保留 Shell。选择器页签会留下，方便再连下一台。
 
 Tabby 仍可作为迁移期兜底，安装和卸载都不会改它。
 

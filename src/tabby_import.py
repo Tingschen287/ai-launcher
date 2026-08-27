@@ -181,6 +181,7 @@ def import_from_tabby(path=None, copy_passwords=True, getter=None):
             "name": profile["name"],
             "group": profile["group"],
             "color": color_for(profile["group"]),
+            "via": "windows",
         }
         comment = f"# host-deck tabby: {profile['id']}" if profile["id"] else "# host-deck tabby"
         deck.append_ssh_block(host, comment=comment)
