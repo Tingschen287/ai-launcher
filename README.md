@@ -9,7 +9,7 @@
 
 启动器只负责发现、选择、分组和交接。不替代 Agent CLI，也不自己实现 SSH。
 
-仓库名仍是 `ai-launcher`。当前运行时是 WSL + Windows Terminal。
+GitHub 仓库名是 `terminal-deck`。当前运行时是 WSL + Windows Terminal。
 
 ## 平台状态
 
