@@ -10,3 +10,6 @@ build/
 agents.toml
 history.tsv
 *.bak.*
+
+# ===== Claude Code 工作区（worktree 是整仓副本，绝不入 git）=====
+.claude/
