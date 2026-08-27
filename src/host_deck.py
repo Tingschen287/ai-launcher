@@ -32,7 +32,7 @@ if _HERE not in sys.path:
 import deck_tui as tui
 import host_secrets as secrets
 from deck_tui import (
-    HOME, ESC, FG, RESET, BOLD, DIM, MUTED, TEXT, GREEN,
+    HOME, ESC, FG, RESET, BOLD, DIM, MUTED, TEXT,
     YELLOW, RED, SELBG, Term, draw, hit, hit_tab, tab_header,
     action_row, fit_row, pad, pad_tail, ago,
 )
@@ -560,7 +560,7 @@ def pick_new_host(term, cfg):
         rows.append((False, lambda _s: ""))
         if error:
             rows.append((False, lambda _s, error=error: f"    {RED}{error}{RESET}"))
-        rows.append((True, action_row("+", "保存", "写入 ssh config，密码进凭据库", GREEN)))
+        rows.append((True, action_row("+", "保存", "写入 ssh config，密码进凭据库", "#4ade80")))
         rows.append((True, action_row("×", "取消", "不保存", DEFAULT_COLOR)))
         visual_sel = hover if hover is not None else sel
         geom = draw(

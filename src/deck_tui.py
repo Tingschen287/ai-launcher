@@ -14,7 +14,13 @@ import unicodedata
 HOME = os.path.expanduser("~")
 
 ESC = "\x1b"
-FG = lambda c: f"{ESC}[38;2;{int(c[1:3],16)};{int(c[3:5],16)};{int(c[5:7],16)}m"
+def FG(c):
+    if not (isinstance(c, str) and len(c) >= 7 and c[0] == "#"):
+        return ""
+    try:
+        return f"{ESC}[38;2;{int(c[1:3],16)};{int(c[3:5],16)};{int(c[5:7],16)}m"
+    except ValueError:
+        return ""
 BG = lambda c: f"{ESC}[48;2;{int(c[1:3],16)};{int(c[3:5],16)};{int(c[5:7],16)}m"
 RESET = f"{ESC}[0m"
 BOLD = f"{ESC}[1m"

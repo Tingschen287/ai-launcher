@@ -278,6 +278,11 @@ class HostDeckTests(unittest.TestCase):
         self.assertIn("HOST_DECK_ASKPASS_ALIAS=box-a", wrapped)
         self.assertNotIn("secret-value-xyz", wrapped)
 
+    def test_new_host_save_row_renders_without_color_crash(self):
+        row = host.action_row("+", "保存", "写入 ssh config，密码进凭据库", "#4ade80")
+        text = row(True)
+        self.assertIn("保存", text)
+
     def test_new_host_form_saves_with_keyboard(self):
         geometry = {"rows": {}, "tabs": [], "left": 0, "width": 40}
         keys = list("boxa") + ["\t"] + list("example.test") + ["\t"] * 7 + ["\r"]
