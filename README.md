@@ -1,8 +1,15 @@
-# Agent Deck
+# Agent Deck · Host Deck
 
-A keyboard-first command deck for Claude Code, Codex CLI, Grok, Kimi, and other AI coding agents.
+同一个仓库里的两个终端入口，共用一套 TUI：
 
-用一个 `ai` 命令选择 Agent 和工作目录，再调用本机已经安装的原生 CLI。启动器统一管理菜单、目录历史、代理、环境变量、PATH 与 Windows Terminal 页签交接，不替代各家 Agent 本身。
+| 产品 | 命令 | 干什么 | 真正干活的程序 |
+|---|---|---|---|
+| **Agent Deck** | `ai` | 选 Agent、选目录、开会话 | `claude` / `codex` / `grok` / `kimi` 等原生 CLI |
+| **Host Deck** | `host` | 选服务器、分组、连接 | 本机 OpenSSH |
+
+启动器只负责发现、选择、分组和交接。不替代 Agent CLI，也不自己实现 SSH。
+
+仓库名仍是 `ai-launcher`。当前运行时是 WSL + Windows Terminal。
 
 ## 平台状态
 
@@ -13,30 +20,6 @@ A keyboard-first command deck for Claude Code, Codex CLI, Grok, Kimi, and other 
 | Windows native | 规划中 |
 | macOS | 规划中 |
 
-仓库名称有意保持平台中立。当前版本不会提前声称 Windows 原生或 macOS 已适配。
-
-同仓库还提供兄弟工具 **Host Deck**（命令 `host`）：用同一套 TUI 选择 SSH 主机，再交给本机 OpenSSH。连接参数仍以 `~/.ssh/config` 为准。
-
-## 功能
-
-- 键盘、数字键和鼠标选择 Agent
-- 可点击行提供实时鼠标悬停高亮反馈
-- 最近目录、Git 分支与工作区状态
-- 手动输入路径时实时展示和筛选下级目录
-- TOML 驱动的 Agent 注册表
-- 每个 Agent 独立的颜色、环境变量、PATH、代理策略和默认目录
-- 按 Agent 各自的 CLI 语法打开原生 Resume 会话选择页
-- Windows Terminal 隐藏 Profile 页签交接
-- CLI 直达和参数透传
-- Agent 退出后保留工作 Shell，便于查看错误与继续操作
-
-## 要求
-
-- Python 3.11 或更高版本（使用标准库 `tomllib`）
-- Bash
-- 至少安装一个要调用的 Agent CLI
-- Windows Terminal 仅在需要页签交接时使用
-
 ## 安装
 
 ```bash
@@ -45,23 +28,23 @@ cd ai-launcher
 ./scripts/install.sh
 ```
 
-安装脚本会：
+需要 Python 3.11+ 和 Bash。安装脚本会：
 
-- 安装共享 TUI、Agent Deck 和 Host Deck 到 `~/.local/lib/deck/`
+- 把共享 TUI、Agent Deck、Host Deck 装到 `~/.local/lib/deck/`
 - 把 `~/.local/bin/ai` 和 `~/.local/bin/host` 链过去
-- 仅在配置不存在时创建 `agents.toml` 与 `hosts.toml`
+- 配置不存在时才创建 `agents.toml` / `hosts.toml`
 - 升级时保留已有配置
 
-确认 `~/.local/bin` 已加入 `PATH`，然后运行：
+确认 `~/.local/bin` 已在 `PATH`：
 
 ```bash
 ai --list
-ai
 host --list
-host
 ```
 
-## 使用
+## Agent Deck
+
+选 Agent 和工作目录，再调用本机已安装的原生 CLI。菜单、目录历史、代理、环境变量、PATH、Windows Terminal 页签由启动器管。
 
 ```text
 ai                         选择 Agent，再选择目录
@@ -74,19 +57,7 @@ ai --list                  查看 Agent 注册表
 ai --version               查看版本
 ```
 
-`--` 后面的参数会原样传给 Agent CLI。
-
-### 恢复会话
-
-目录页标题栏提供 `New | Resume` 两个模式 Tab，默认选择 `New`：
-
-- `New`：选择任意路径后启动新会话
-- `Resume`：选择任意路径后打开当前 Agent 的原生 Resume 会话选择页
-- `Tab`：切换模式；也可以按 `n` / `r`，或直接用鼠标点击标题栏 Tab
-
-所选目录用于限定当前工作区，具体恢复哪个会话由 Agent 自己的 Picker 决定。
-
-各 Agent 使用自己的续接语法，统一由 `resume_args` 配置：
+`--` 后面的参数原样传给 Agent CLI。目录页标题是 `New | Resume`，默认 `New`。Resume 用各 Agent 自己的语法：
 
 | Agent | 实际命令 |
 |---|---|
@@ -95,70 +66,27 @@ ai --version               查看版本
 | Grok | `grok "/resume"` |
 | Kimi | `kimi --session` |
 
-### 路径补全
-
-在目录菜单按 `/` 会从根目录开始输入，按 `e` 会从当前选中的目录开始浏览。输入过程中，下方会实时列出匹配的直接子目录：
-
-- `↑` / `↓`：选择候选目录
-- `Tab` / `→`：补全候选并进入下一级
-- `Enter`：确认当前有效路径或选中的候选
-- 鼠标单击：直接确认候选目录
-- `Ctrl+U`：清空输入
-- `Esc`：回到最近目录菜单
-
-## 配置
-
-默认配置位于 `~/.config/ai-launcher/agents.toml`。可从 [`config/agents.example.toml`](config/agents.example.toml) 开始修改。
-
-```toml
-default_dir = "$HOME/dev"
-
-[[agent]]
-key = "codex"
-name = "Codex"
-color = "#e8e6e1"
-note = "OpenAI"
-cmd = "codex"
-resume_args = ["resume"]
-proxy = true
-path_prepend = ["$HOME/.npm-global/bin"]
-env = {}
-unset = []
-wt_profile = "Codex (WSL)"
-```
-
-字段说明：
+配置：`~/.config/ai-launcher/agents.toml`，样例见 [`config/agents.example.toml`](config/agents.example.toml)。可用 `AI_LAUNCHER_CONFIG`、`AI_LAUNCHER_HISTORY` 覆盖路径。
 
 | 字段 | 含义 |
 |---|---|
 | `key` | CLI 短名与数字菜单标识 |
 | `name` | 菜单显示名称 |
 | `cmd` | 最终执行的本机原生命令 |
-| `resume_args` | 打开该 Agent 原生 Resume 选择页时追加到 `cmd` 后的参数数组 |
-| `color` | 菜单强调色，格式为 `#RRGGBB` |
+| `resume_args` | 打开原生 Resume 页时追加的参数 |
+| `color` | `#RRGGBB` |
 | `note` | 菜单备注 |
-| `proxy` | `true` 显式运行 `proxy-on --quiet`；`false` 清除继承的代理变量，保证当前 Agent 直连 |
-| `path_prepend` | 启动前追加到 PATH 前端的目录 |
+| `proxy` | `true` 走 `proxy-on --quiet`；`false` 清代理、直连 |
+| `path_prepend` | 启动前加到 PATH 前面 |
 | `env` / `unset` | 启动前设置或清除的环境变量 |
 | `default_dir` | Agent 专属默认目录 |
-| `wt_profile` | Windows Terminal 交接使用的隐藏 Profile 名称 |
+| `wt_profile` | Windows Terminal 隐藏 Profile 名 |
 
-可用 `AI_LAUNCHER_CONFIG` 和 `AI_LAUNCHER_HISTORY` 覆盖默认配置及历史文件路径。
-
-## Windows Terminal
-
-[`integrations/windows-terminal/profiles.example.jsonc`](integrations/windows-terminal/profiles.example.jsonc) 提供可见的 `Agent Deck` / `Host Deck` Profile，以及各 Agent 与通用 `SSH (WSL)` 的隐藏 Profile 示例。
-
-1. 将示例对象合并进 Windows Terminal `settings.json` 的 `profiles.list`。
-2. 把 `<DISTRO>`、`<WSL_USER>` 替换为本机值。
-3. 如 GUID 与本机配置冲突，请重新生成。
-4. `icon` 是可选字段，可按机器自行添加，不需要提交到仓库。
-
-从 `Agent Deck` Profile 进入时，启动器会尝试在同一窗口创建对应 Agent 页签；没有匹配 Profile 或 `wt.exe` 时，会留在当前终端启动。
+Agent 退出后保留 Shell。
 
 ## Host Deck
 
-`host` 负责发现、分组、选择和启动 SSH 连接，不替代 OpenSSH。连接参数仍写在 `~/.ssh/config`。密码进系统凭据库，不进配置文件。
+在 Windows Terminal 里选 SSH 主机并连接，少切一次 Tabby。连接事实以 `~/.ssh/config` 为准。Host Deck 只存显示名、分组、颜色、收藏等编排信息。密码进 Windows 凭据库，不进配置文件、不进 Git。
 
 ```text
 host                       选择主机后连接
@@ -166,29 +94,34 @@ host example-dev           直接连接该 Host 别名
 host --attach example-dev  连接后进入或创建 tmux
 host example-dev -- -v     额外参数原样传给 ssh
 host --list                查看发现的主机
-host --import-tabby        从 Tabby 导入 SSH 连接（不改 Tabby）
+host --import-tabby        从 Tabby 导入（不改 Tabby）
 host --version             查看版本
 ```
 
-选择器会尽量铺满终端宽度。分组标题可点，折叠/展开。每条右侧有 `▶` 连接和 `✎` 编辑（键盘 `e`）。
+列表约 88 列宽。分组标题可点，折叠或展开。每条右侧 `▶` 连接、`✎` 编辑（键盘 `e`）。按 `n` 添加主机，只在 `~/.ssh/config` 末尾追加，不改已有 Host。
 
-选择器里按 `n`，或点 `+ 新连接`，可以追加一台主机：别名、主机、用户、端口、密钥路径、显示名、分组、密码。别名会写入 `~/.ssh/config` 末尾，不改已有 Host。密码写入 Windows 凭据库（测试可用 `HOST_DECK_SECRETS_DIR`），连接时通过 `SSH_ASKPASS` 交给 `ssh`。主机密钥确认不会自动点 yes。
+标题栏 `Connect | Attach`，默认 Connect。Attach 会进远程 tmux（有 `tmux_session` 则 `tmux new-session -A -s <name>`）。
 
-`host --import-tabby` 或选择器里的「从 Tabby 导入」会读取 Tabby 的 `config.yaml`，把 SSH 主机追加进 `~/.ssh/config` 和 Host Deck 显示名/分组。能在 Windows 凭据库里对上的密码会拷到 Host Deck 自己的凭据项。Tabby 配置不改，可以再导一次，已导入的会跳过。
+主机来自 `~/.ssh/config` 的 `Host` 别名（跟随 `Include`，跳过通配）。最终参数用 `ssh -G <alias>`，不自己解析 HostName/User/Port/IdentityFile。
 
-标题栏提供 `Connect | Attach` 两个模式 Tab，默认 `Connect`：
+在 WSL 里默认走 Windows 网络（TCP 代理 + OpenSSH），这样能连上 Tabby 能连的那些内网机器，并用凭据库自动填密码。只要 WSL 网络的主机，在 `hosts.toml` 里设 `via = "wsl"`。
 
-- `Connect`：普通 SSH 连接
-- `Attach`：连接后 `tmux attach`；若配置了 `tmux_session` 则 `tmux new-session -A -s <name>`
-- `Tab`：切换模式；也可以按 `c` / `a`，或直接用鼠标点击标题栏 Tab
+从 Tabby 导入：读 Tabby 的 `config.yaml`，追加 Host 和显示名/分组；能对上的密码拷到 Host Deck 自己的凭据项。Tabby 不改。再导一次会跳过已导入的，但会刷新密码。
 
-主机列表来自 `~/.ssh/config` 的 `Host` 别名（跟随 `Include`，跳过 `*` 等通配）。需要最终连接参数时调用 `ssh -G <alias>`，不自己解析 HostName/User/Port/IdentityFile。
+配置：`~/.config/host-deck/hosts.toml`。安装时若没有，写入空 bootstrap。字段见 [`config/hosts.example.toml`](config/hosts.example.toml)。不要把密码写进去。
 
-Host Deck 自己的配置位于 `~/.config/host-deck/hosts.toml`，只保存显示名、分组、颜色、收藏、默认远程目录、连接后命令和 tmux 会话名。可用 `HOST_DECK_CONFIG` 覆盖。安装时若该文件不存在，会写入不含主机条目的 bootstrap 配置；完整字段见 [`config/hosts.example.toml`](config/hosts.example.toml)。不要把密码写进这个文件。
+连接失败后保留 Shell。Host Deck 选择器页签会留下，方便再连下一台。
 
-从 `Host Deck` Profile 进入时，会在同一窗口用隐藏的 `SSH (WSL)` Profile 打开连接页签，并设置页签标题。在 WSL 里默认走 Windows 的 `ssh.exe`（和 Tabby 同一套网络）；个别只要 WSL 网络的主机可在 `hosts.toml` 里设 `via = "wsl"`。连接失败后保留 Shell。选择器页签会留下，方便再连下一台。
+## Windows Terminal
 
-Tabby 仍可作为迁移期兜底，安装和卸载都不会改它。
+[`integrations/windows-terminal/profiles.example.jsonc`](integrations/windows-terminal/profiles.example.jsonc) 里有可见的 `Agent Deck` / `Host Deck`，以及各 Agent 和通用 `SSH (WSL)` 的隐藏 Profile。
+
+1. 合并进 `settings.json` 的 `profiles.list`。
+2. 替换 `<DISTRO>`、`<WSL_USER>`。
+3. GUID 冲突就重新生成。
+4. `icon` 按机器自己加，不要提交进仓库。
+
+从对应 Profile 进入时，会在同一窗口开新页签。没有匹配 Profile 或 `wt.exe` 时，留在当前终端启动。
 
 ## 更新与卸载
 
@@ -197,17 +130,12 @@ git pull --ff-only
 ./scripts/install.sh
 ```
 
-普通卸载会保留配置和历史：
-
 ```bash
-./scripts/uninstall.sh
+./scripts/uninstall.sh            # 保留配置和历史
+./scripts/uninstall.sh --purge    # 连配置和历史一起删
 ```
 
-同时清除配置和历史：
-
-```bash
-./scripts/uninstall.sh --purge
-```
+卸载不会改 Tabby，也不会清 Windows 凭据库里的密码。
 
 ## 开发校验
 
@@ -219,8 +147,8 @@ bash -n scripts/install.sh scripts/uninstall.sh
 ## Roadmap
 
 - 抽离终端输入、进程启动和页签集成的 platform adapters
-- Windows 原生 Terminal / PowerShell 支持
-- macOS Terminal / iTerm2 支持
+- Windows 原生 Terminal / PowerShell
+- macOS Terminal / iTerm2
 - 可选的配置初始化向导
 
 ## License

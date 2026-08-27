@@ -2,8 +2,9 @@
 
 ## Scope
 
-Agent Deck is intended to become cross-platform, but the current supported runtime is
-WSL/Linux. Windows-native and macOS adapters are roadmap items, not current behavior.
+Agent Deck and Host Deck share this repo. Both are intended to become
+cross-platform, but the current supported runtime is WSL/Linux.
+Windows-native and macOS adapters are roadmap items, not current behavior.
 
 ## Sources of truth
 
