@@ -136,13 +136,14 @@ def _ps_quote(value: str) -> str:
     return "'" + (value or "").replace("'", "''") + "'"
 
 
-def _run_windows(mode: str, alias: str, password: str | None = None, user: str = ""):
+def _run_windows(mode: str, alias: str, password: str | None = None,
+                 user: str = "", target: str | None = None):
     exe = _powershell()
     if not exe:
         raise RuntimeError("找不到 powershell.exe，无法使用 Windows 凭据库")
     header = (
         f"$mode = {_ps_quote(mode)}\n"
-        f"$target = {_ps_quote(cred_target(alias))}\n"
+        f"$target = {_ps_quote(target or cred_target(alias))}\n"
         f"$user = {_ps_quote(user or 'host-deck')}\n"
     )
     encoded = __import__("base64").b64encode(
@@ -174,6 +175,22 @@ def has_password(alias: str) -> bool:
             found = False
     _HAS_CACHE[alias] = found
     return found
+
+
+def get_windows_secret(target: str) -> str | None:
+    """按凭据目标名读取，供 Tabby 等外部条目导入。成功才返回密码。"""
+    if not target:
+        return None
+    if _secrets_dir():
+        return None
+    try:
+        result = _run_windows("get", alias="external", target=target)
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+    secret = result.stdout.decode("utf-8", errors="replace")
+    return secret if secret else None
 
 
 def get_password(alias: str) -> str | None:

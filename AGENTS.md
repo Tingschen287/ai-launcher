@@ -11,6 +11,7 @@ WSL/Linux. Windows-native and macOS adapters are roadmap items, not current beha
 - Agent Deck: `src/ai_launcher.py`
 - Host Deck: `src/host_deck.py`
 - Host Deck secrets: `src/host_secrets.py`
+- Tabby import: `src/tabby_import.py`
 - Shareable configuration: `config/agents.example.toml`, `config/hosts.example.toml`
 - WSL installation: `scripts/install.sh`
 - Windows Terminal example: `integrations/windows-terminal/profiles.example.jsonc`

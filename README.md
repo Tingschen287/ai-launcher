@@ -166,10 +166,13 @@ host example-dev           直接连接该 Host 别名
 host --attach example-dev  连接后进入或创建 tmux
 host example-dev -- -v     额外参数原样传给 ssh
 host --list                查看发现的主机
+host --import-tabby        从 Tabby 导入 SSH 连接（不改 Tabby）
 host --version             查看版本
 ```
 
 选择器里按 `n`，或点 `+ 新连接`，可以追加一台主机：别名、主机、用户、端口、密钥路径、显示名、分组、密码。别名会写入 `~/.ssh/config` 末尾，不改已有 Host。密码写入 Windows 凭据库（测试可用 `HOST_DECK_SECRETS_DIR`），连接时通过 `SSH_ASKPASS` 交给 `ssh`。主机密钥确认不会自动点 yes。
+
+`host --import-tabby` 或选择器里的「从 Tabby 导入」会读取 Tabby 的 `config.yaml`，把 SSH 主机追加进 `~/.ssh/config` 和 Host Deck 显示名/分组。能在 Windows 凭据库里对上的密码会拷到 Host Deck 自己的凭据项。Tabby 配置不改，可以再导一次，已导入的会跳过。
 
 标题栏提供 `Connect | Attach` 两个模式 Tab，默认 `Connect`：
 

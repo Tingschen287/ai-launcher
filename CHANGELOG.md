@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.4 - 2026-08-26
+
+- Host Deck 0.3.0: import Tabby SSH profiles into `~/.ssh/config` and Host Deck metadata.
+- Copy matching passwords from the OS credential store; leave Tabby unchanged.
+
 ## 0.5.3 - 2026-08-26
 
 - Host Deck 0.2.0: add a New Connection form that appends a Host block to `~/.ssh/config`.

@@ -6,6 +6,7 @@
   host dev-box            直接连接该 Host 别名
   host --attach dev-box   连接后进入 tmux
   host --list             打印发现的主机
+  host --import-tabby     从 Tabby 导入 SSH 连接（不改 Tabby）
   host dev-box -- -v      额外参数原样传给 ssh
 
 连接事实以 ~/.ssh/config 为准。本配置只保存分组、颜色、收藏等编排信息。
@@ -37,7 +38,7 @@ from deck_tui import (
     action_row, fit_row, pad, pad_tail, ago,
 )
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 DEFAULT_COLOR = "#38bdf8"
 CONF = os.environ.get(
     "HOST_DECK_CONFIG",
@@ -367,10 +368,13 @@ def validate_draft(draft):
     return errors, cleaned
 
 
-def append_ssh_block(host):
+def append_ssh_block(host, comment=""):
     path = SSH_CONFIG
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    lines = [f"Host {host['alias']}", f"    HostName {_ssh_config_value(host['hostname'])}"]
+    lines = []
+    if comment:
+        lines.append(comment)
+    lines += [f"Host {host['alias']}", f"    HostName {_ssh_config_value(host['hostname'])}"]
     if host.get("user"):
         lines.append(f"    User {_ssh_config_value(host['user'])}")
     if host.get("port"):
@@ -667,12 +671,15 @@ def pick_host(term, items, cfg, attach=False):
             "/", "搜索 / 输入目标", "别名、分组，或 user@host", color)))
         rows.append((True, action_row(
             "+", "新连接", "写入 ssh config，可记密码", color)))
-        if sel >= add_idx + 1:
+        import_idx = add_idx + 1
+        rows.append((True, action_row(
+            "↓", "从 Tabby 导入", "只读 Tabby，追加到 ssh config", color)))
+        if sel >= import_idx + 1:
             sel = 0
         title, tab_regions = header_line(attach, tab_hover, color)
         visual_sel = hover if hover is not None else sel
         hint = ("输入筛选 · Enter 连接 · Esc 退出搜索" if search_mode else
-                "↑↓/鼠标 选 · Enter 连接 · n 新连接 · / 搜索 · f 收藏 · q 退出")
+                "↑↓/鼠标 选 · Enter 连接 · n 新连接 · i 导入 Tabby · / 搜索 · q 退出")
         geom = draw(title, status_right(len(items)), rows, visual_sel, hint, tab_regions)
         kind, *rest = term.key()
         if kind == "mouse":
@@ -693,6 +700,8 @@ def pick_host(term, items, cfg, attach=False):
                 elif index == add_idx:
                     if pick_new_host(term, cfg):
                         return "reload", attach
+                elif index == import_idx:
+                    return "import-tabby", attach
             continue
         hover = None
         tab_hover = None
@@ -720,9 +729,9 @@ def pick_host(term, items, cfg, attach=False):
                 error, sel = "", 0
             continue
         if key in ("up", "k"):
-            sel = (sel - 1) % (add_idx + 1)
+            sel = (sel - 1) % (import_idx + 1)
         elif key in ("down", "j"):
-            sel = (sel + 1) % (add_idx + 1)
+            sel = (sel + 1) % (import_idx + 1)
         elif key in ("\r", "\n", "right", "l"):
             if sel < len(selectable):
                 return selectable[sel], attach
@@ -731,6 +740,8 @@ def pick_host(term, items, cfg, attach=False):
             elif sel == add_idx:
                 if pick_new_host(term, cfg):
                     return "reload", attach
+            elif sel == import_idx:
+                return "import-tabby", attach
         elif len(key) == 1 and "1" <= key <= "9" and int(key) <= len(selectable):
             return selectable[int(key) - 1], attach
         elif key == "a":
@@ -746,6 +757,8 @@ def pick_host(term, items, cfg, attach=False):
         elif key == "n":
             if pick_new_host(term, cfg):
                 return "reload", attach
+        elif key == "i":
+            return "import-tabby", attach
         elif key in ("q", "\x03", "esc"):
             return None
 
@@ -940,6 +953,15 @@ def main():
     if args and args[0] == "--list":
         print_list(cfg)
         return
+    if args and args[0] == "--import-tabby":
+        import tabby_import
+        path = args[1] if len(args) > 1 else None
+        try:
+            stats = tabby_import.import_from_tabby(path)
+        except Exception as exc:
+            sys.exit(str(exc))
+        tabby_import.print_stats(stats)
+        return
 
     want_attach = False
     while args and args[0].startswith("--"):
@@ -971,6 +993,16 @@ def main():
                 return
             item, attach = choice
             if item == "reload":
+                cfg = load_config()
+                items = build_items(cfg)
+                want_attach = attach
+                continue
+            if item == "import-tabby":
+                import tabby_import
+                try:
+                    tabby_import.import_from_tabby()
+                except Exception:
+                    pass
                 cfg = load_config()
                 items = build_items(cfg)
                 want_attach = attach
