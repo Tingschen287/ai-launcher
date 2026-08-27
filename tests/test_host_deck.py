@@ -188,6 +188,20 @@ class HostDeckTests(unittest.TestCase):
         self.assertEqual(item["alias"], "box-a")
         self.assertFalse(attach)
 
+    def test_picker_skips_redraw_when_hover_stays_on_same_row(self):
+        self.write_ssh("Host box-a\nHost box-b\n")
+        items = host.build_items(host.default_config())
+        geometry = {"rows": {10: 1}, "tabs": [], "cells": [], "left": 0, "width": 20}
+        events = EventTerm(
+            ("mouse", 10, 5, "move"),
+            ("mouse", 10, 6, "move"),
+            ("key", "q"),
+        )
+        with patch.object(host, "draw", return_value=geometry) as draw, \
+                patch.object(host, "fill_summaries"):
+            host.pick_host(events, items, host.default_config())
+        self.assertEqual(len(draw.call_args_list), 2)
+
     def test_picker_hover_highlights_row(self):
         self.write_ssh("Host box-a\nHost box-b\n")
         items = host.build_items(host.default_config())

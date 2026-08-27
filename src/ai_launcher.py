@@ -254,11 +254,16 @@ def status_right(agent=None):
 def pick_agent(term, agents):
     sel = 0
     hover = None
+    last_visual = None
+    geom = {"rows": {}, "left": 0, "width": 0}
     while True:
         rows = [(True, agent_row(a, i + 1)) for i, a in enumerate(agents)]
         visual_sel = hover if hover is not None else sel
-        geom = draw("◇ Agent Deck", status_right(), rows, visual_sel,
-                    "↑↓/鼠标 选 · Enter 进 · 1-9 直达 · s 纯 Shell · q 退出")
+        visual = (visual_sel,)
+        if visual != last_visual:
+            geom = draw("◇ Agent Deck", status_right(), rows, visual_sel,
+                        "↑↓/鼠标 选 · Enter 进 · 1-9 直达 · s 纯 Shell · q 退出")
+            last_visual = visual
         kind, *rest = term.key()
         if kind == "mouse":
             row, col, action = rest

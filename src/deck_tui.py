@@ -251,7 +251,16 @@ def draw(header_title, header_right, rows, sel, footer, header_regions=None,
     pad_l = " " * left
 
     out = [""] * top + [pad_l + ln if ln else "" for ln in lines]
-    sys.stdout.write(f"{ESC}[H{ESC}[2J" + "\r\n".join(out))
+    # 2026 同步输出：Windows Terminal 会等整帧画完再显示，避免先清屏后闪一下。
+    # 不用 2J 整页擦除；每行 K 清到行尾，最后 J 清掉下面的旧内容。
+    parts = [f"{ESC}[?2026h{ESC}[H"]
+    for i, ln in enumerate(out):
+        parts.append(ln)
+        parts.append(f"{ESC}[K")
+        if i + 1 < len(out):
+            parts.append("\r\n")
+    parts.append(f"{ESC}[J{ESC}[?2026l")
+    sys.stdout.write("".join(parts))
     sys.stdout.flush()
     # 屏幕行号从 1 起：块内偏移 + top + 1
     # 标题文字首字符在 left + 3；标题内容位于 frame 的第二行。

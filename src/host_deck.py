@@ -776,6 +776,8 @@ def pick_new_host(term, cfg, existing=None):
     save_idx = len(NEW_HOST_FIELDS)
     cancel_idx = save_idx + 1
     total = cancel_idx + 1
+    last_visual = None
+    geom = {"rows": {}, "left": 0, "width": 0}
     while True:
         rows = []
         for i, (key, label, secret, hint) in enumerate(NEW_HOST_FIELDS):
@@ -788,13 +790,16 @@ def pick_new_host(term, cfg, existing=None):
         rows.append((True, action_row("×", "取消", "不保存", DEFAULT_COLOR)))
         visual_sel = hover if hover is not None else sel
         mode = "编辑连接" if existing else "新连接"
-        geom = draw(
-            f"{TEXT}{BOLD}Host Deck{RESET}{DIM} › {mode}{RESET}",
-            status_right(len(cfg.get("hosts") or {})),
-            rows, visual_sel,
-            "↑↓ 换项 · 输入文字 · Enter 保存/下一项 · Esc 取消",
-            box_max=88,
-        )
+        visual = (visual_sel, error, tuple(draft.get(k, "") for k, *_ in NEW_HOST_FIELDS))
+        if visual != last_visual:
+            geom = draw(
+                f"{TEXT}{BOLD}Host Deck{RESET}{DIM} › {mode}{RESET}",
+                status_right(len(cfg.get("hosts") or {})),
+                rows, visual_sel,
+                "↑↓ 换项 · 输入文字 · Enter 保存/下一项 · Esc 取消",
+                box_max=88,
+            )
+            last_visual = visual
         kind, *rest = term.key()
         if kind == "mouse":
             row, col, action = rest
@@ -865,6 +870,8 @@ def pick_host(term, items, cfg, attach=False):
     color = DEFAULT_COLOR
     collapsed = read_collapsed()
     fill_summaries(items)
+    last_visual = None
+    geom = {"rows": {}, "tabs": [], "cells": [], "left": 0, "width": 0}
 
     while True:
         favorites = set(read_favorites(cfg))
@@ -915,8 +922,12 @@ def pick_host(term, items, cfg, attach=False):
         visual_sel = hover if hover is not None else sel
         hint = ("输入筛选 · Enter 连接 · Esc 退出搜索" if search_mode else
                 "↑↓ 选 · Enter/▶ 连接 · ✎/e 编辑 · 分组回车折叠 · n 新建 · / 搜索 · q 退出")
-        geom = draw(title, status_right(len(items)), rows, visual_sel, hint, tab_regions,
-                    box_max=88)
+        visual = (attach, search_mode, query, error, visual_sel, tab_hover,
+                  btn_hover, tuple(sorted(collapsed)), host_count, len(selectable))
+        if visual != last_visual:
+            geom = draw(title, status_right(len(items)), rows, visual_sel, hint, tab_regions,
+                        box_max=88)
+            last_visual = visual
         kind, *rest = term.key()
         if kind == "mouse":
             row, col, action = rest
