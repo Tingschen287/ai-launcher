@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.8 - 2026-08-27
+
+- Press `d` to jump between Agent Deck and Host Deck. Inside Windows Terminal it opens the other deck's own profile in a new tab, so the tab keeps the right icon; elsewhere it replaces the current process.
+- The hint and the key stay inert when the other deck is not installed.
+- Peer command and profile are overridable via `AI_LAUNCHER_PEER_BIN` / `AI_LAUNCHER_PEER_PROFILE` and `HOST_DECK_PEER_BIN` / `HOST_DECK_PEER_PROFILE`.
+
 ## 0.5.7 - 2026-08-26
 
 - Host Deck 0.4.0: wider host list, collapsible groups, per-row connect and edit buttons.

@@ -36,6 +36,7 @@ from deck_tui import (
     HOME, ESC, FG, RESET, BOLD, DIM, MUTED, TEXT,
     YELLOW, RED, SELBG, Term, draw, hit, hit_tab, hit_cell, tab_header,
     action_row, fit_row, pad, pad_tail, ago, dwidth,
+    peer_available, switch_deck,
 )
 
 VERSION = "0.4.0"
@@ -60,6 +61,12 @@ COLLAPSED = os.environ.get(
     "HOST_DECK_COLLAPSED",
     os.path.join(HOME, ".local", "share", "host-deck", "collapsed.txt"),
 )
+# 另一个 deck：按 d 跳过去。装了才显示、才响应。
+PEER_BIN = os.environ.get(
+    "HOST_DECK_PEER_BIN", os.path.join(HOME, ".local", "bin", "ai"))
+PEER_PROFILE = os.environ.get("HOST_DECK_PEER_PROFILE", "Agent Deck")
+PEER_HANDOFF_ENV = "AI_LAUNCHER_HANDOFF"
+
 PLAY_BTN = " ▶ "
 EDIT_BTN = " ✎ "
 HIST_KEEP = 24
@@ -861,6 +868,7 @@ def _host_of(entry):
 
 def pick_host(term, items, cfg, attach=False):
     sel = 0
+    can_switch = peer_available(PEER_BIN)
     hover = None
     tab_hover = None
     btn_hover = None
@@ -921,7 +929,8 @@ def pick_host(term, items, cfg, attach=False):
         title, tab_regions = header_line(attach, tab_hover, color)
         visual_sel = hover if hover is not None else sel
         hint = ("输入筛选 · Enter 连接 · Esc 退出搜索" if search_mode else
-                "↑↓ 选 · Enter/▶ 连接 · ✎/e 编辑 · 分组回车折叠 · n 新建 · / 搜索 · q 退出")
+                "↑↓ 选 · Enter/▶ 连接 · ✎/e 编辑 · 分组回车折叠 · n 新建 · / 搜索"
+                + (" · d 切到 Agent" if can_switch else "") + " · q 退出")
         visual = (attach, search_mode, query, error, visual_sel, tab_hover,
                   btn_hover, tuple(sorted(collapsed)), host_count, len(selectable))
         if visual != last_visual:
@@ -1032,6 +1041,8 @@ def pick_host(term, items, cfg, attach=False):
                 return "reload", attach
         elif key == "i":
             return "import-tabby", attach
+        elif key == "d" and can_switch:
+            return "switch", attach
         elif key in ("q", "\x03", "esc"):
             return None
 
@@ -1400,12 +1411,16 @@ def main():
         sys.exit("需要交互式终端；或用 `host <别名>` 直达")
 
     items = build_items(cfg)
+    want_switch = False
     with Term() as term:
         while True:
             choice = pick_host(term, items, cfg, attach=want_attach)
             if choice is None:
                 return
             item, attach = choice
+            if item == "switch":
+                want_switch = True
+                break               # 出了 with 才切，终端要先恢复
             if item == "reload":
                 cfg = load_config()
                 items = build_items(cfg)
@@ -1425,6 +1440,9 @@ def main():
             if result != "handoff":
                 return
             items = build_items(cfg)
+    if want_switch:
+        switch_deck(PEER_BIN, PEER_PROFILE, PEER_HANDOFF_ENV,
+                    os.environ.get("HOST_DECK_HANDOFF") == "1")
 
 
 if __name__ == "__main__":

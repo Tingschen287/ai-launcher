@@ -4,7 +4,9 @@ import codecs
 import os
 import re
 import select
+import shlex
 import shutil
+import subprocess
 import sys
 import termios
 import time
@@ -12,6 +14,49 @@ import tty
 import unicodedata
 
 HOME = os.path.expanduser("~")
+
+
+# ─────────────────────── 跨 deck 跳转 ───────────────────────
+
+def peer_available(peer_bin: str) -> bool:
+    """另一个 deck 装了没有。没装就不显示提示、不响应按键。"""
+    return bool(peer_bin) and os.path.exists(os.path.expanduser(peer_bin))
+
+
+def switch_deck(peer_bin, peer_profile, peer_handoff_env, in_handoff):
+    """跳到另一个 deck。此函数不返回。
+
+    本页签是从 Windows Terminal 的可见 Profile 起来的，就开对方 Profile 的
+    新页签——页签图标只能跟 Profile 走，这样图标才是对方的——然后本页签退出。
+    其他情况（比如手敲 ai / host）就地把本进程换成对方命令。
+
+    调用前必须已经退出 Term 上下文，否则终端还停在 raw 模式和备用屏里。
+    """
+    target = os.path.expanduser(peer_bin)
+    if not os.path.exists(target):
+        sys.exit(f"找不到另一个 deck：{target}")
+    quoted = shlex.quote(target)
+    if in_handoff and peer_profile:
+        wt = shutil.which("wt.exe")
+        if wt:
+            # 同时给 -p 和显式命令行：Profile 名对不上时图标会退化，
+            # 但页签里跑的仍然是对方的 deck，不会开出一个空 shell。
+            inner = f"{peer_handoff_env}=1 {quoted}"
+            cmd = [wt, "-w", "0", "nt", "-p", peer_profile,
+                   "wsl.exe", "-d", os.environ.get("WSL_DISTRO_NAME", "Ubuntu"),
+                   "-u", os.environ.get("USER", "linux"), "--cd", "~", "--",
+                   "bash", "-lc", inner]
+            try:
+                result = subprocess.run(
+                    cmd, timeout=20,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if result.returncode == 0:
+                    # 等新页签真的建出来再退，否则本页签是窗口里最后一个时窗口会先关。
+                    time.sleep(0.4)
+                    sys.exit(0)
+            except Exception:
+                pass
+    os.execv("/bin/bash", ["bash", "-lc", f"exec {quoted}"])
 
 ESC = "\x1b"
 def FG(c):

@@ -32,6 +32,7 @@ from deck_tui import (
     HOME, ESC, FG, RESET, BOLD, DIM, MUTED, TEXT, ACCENT,
     GREEN, YELLOW, RED, SELBG, Term, draw, hit, hit_tab, tab_header,
     action_row, fit_row, pad, pad_tail, pad_ansi, shorten, expand, ago,
+    peer_available, switch_deck,
 )
 
 VERSION = "0.5.2"
@@ -43,6 +44,12 @@ HIST = os.environ.get(
     "AI_LAUNCHER_HISTORY",
     os.path.join(HOME, ".local", "share", "ai-launcher", "history.tsv"),
 )
+# 另一个 deck：按 d 跳过去。装了才显示、才响应。
+PEER_BIN = os.environ.get(
+    "AI_LAUNCHER_PEER_BIN", os.path.join(HOME, ".local", "bin", "host"))
+PEER_PROFILE = os.environ.get("AI_LAUNCHER_PEER_PROFILE", "Host Deck")
+PEER_HANDOFF_ENV = "HOST_DECK_HANDOFF"
+
 HIST_KEEP = 24      # 历史文件里最多留多少条
 HIST_SHOW = 8       # 菜单里最多显示多少条
 PATH_SHOW = 9       # 路径补全里最多显示多少个子目录
@@ -253,6 +260,7 @@ def status_right(agent=None):
 
 def pick_agent(term, agents):
     sel = 0
+    can_switch = peer_available(PEER_BIN)
     hover = None
     last_visual = None
     geom = {"rows": {}, "left": 0, "width": 0}
@@ -261,8 +269,10 @@ def pick_agent(term, agents):
         visual_sel = hover if hover is not None else sel
         visual = (visual_sel,)
         if visual != last_visual:
+            tail = " · d 切到 Host" if can_switch else ""
             geom = draw("◇ Agent Deck", status_right(), rows, visual_sel,
-                        "↑↓/鼠标 选 · Enter 进 · 1-9 直达 · s 纯 Shell · q 退出")
+                        "↑↓/鼠标 选 · Enter 进 · 1-9 直达 · s 纯 Shell"
+                        f"{tail} · q 退出")
             last_visual = visual
         kind, *rest = term.key()
         if kind == "mouse":
@@ -285,6 +295,8 @@ def pick_agent(term, agents):
             return agents[int(k) - 1]
         elif k == "s":
             return "SHELL"
+        elif k == "d" and can_switch:
+            return "SWITCH"
         elif k in ("q", "\x03", "esc"):
             return None
 
@@ -612,6 +624,8 @@ def main():
             agent = picked or ("SHELL" if want_shell else pick_agent(term, agents))
             if agent is None:
                 return
+            if agent == "SWITCH":
+                break               # 出了 with 才切，终端要先恢复
             ref = agent if agent != "SHELL" else \
                 {"name": "纯 Shell", "key": "shell",
                  "color": "#9ca3af", "default_dir": "$HOME/dev",
@@ -627,6 +641,9 @@ def main():
             if target is None:
                 continue
             break
+    if agent == "SWITCH":
+        switch_deck(PEER_BIN, PEER_PROFILE, PEER_HANDOFF_ENV,
+                    os.environ.get("AI_LAUNCHER_HANDOFF") == "1")
     launch(agent, target, passthru, resume)
 
 
