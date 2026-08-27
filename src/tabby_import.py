@@ -119,16 +119,27 @@ def make_alias(name, hostname, user, used):
     return alias
 
 
-def imported_tabby_ids(path):
-    found = set()
+def imported_tabby_map(path):
+    """tabby id -> Host 别名。"""
+    mapping = {}
+    last_id = None
     if not os.path.isfile(path):
-        return found
+        return mapping
     with open(path, encoding="utf-8") as handle:
         for line in handle:
-            match = re.match(r"^# host-deck tabby:\s*(\S+)", line.strip())
-            if match:
-                found.add(match.group(1))
-    return found
+            marker = re.match(r"^# host-deck tabby:\s*(\S+)", line.strip())
+            if marker:
+                last_id = marker.group(1)
+                continue
+            host = re.match(r"^Host\s+(\S+)", line)
+            if host and last_id:
+                mapping[last_id] = host.group(1)
+                last_id = None
+    return mapping
+
+
+def imported_tabby_ids(path):
+    return set(imported_tabby_map(path))
 
 
 def tabby_password_targets(hostname, port, user):
@@ -157,7 +168,7 @@ def import_from_tabby(path=None, copy_passwords=True, getter=None):
         raise FileNotFoundError("找不到 Tabby 配置 config.yaml")
     profiles = load_tabby(path)
     used = set(deck.discover_aliases())
-    seen_ids = imported_tabby_ids(deck.SSH_CONFIG)
+    seen = imported_tabby_map(deck.SSH_CONFIG)
     stats = {
         "source": path,
         "found": len(profiles),
@@ -168,8 +179,17 @@ def import_from_tabby(path=None, copy_passwords=True, getter=None):
         "names": [],
     }
     for profile in profiles:
-        if profile["id"] and profile["id"] in seen_ids:
+        if profile["id"] and profile["id"] in seen:
+            alias = seen[profile["id"]]
             stats["skipped"] += 1
+            if copy_passwords:
+                secret = lookup_tabby_password(
+                    profile["hostname"], profile["port"], profile["user"], getter=getter)
+                if secret:
+                    secrets.store_password(alias, secret, user=profile["user"])
+                    stats["passwords"] += 1
+                elif profile["auth"] == "password":
+                    stats["password_missing"] += 1
             continue
         alias = make_alias(profile["name"], profile["hostname"], profile["user"], used)
         host = {
@@ -197,14 +217,14 @@ def import_from_tabby(path=None, copy_passwords=True, getter=None):
         stats["imported"] += 1
         stats["names"].append((profile["name"], alias, profile["group"]))
         if profile["id"]:
-            seen_ids.add(profile["id"])
+            seen[profile["id"]] = alias
     return stats
 
 
 def print_stats(stats):
     print(f"Tabby 配置：已读取 {stats['found']} 条 SSH")
     print(f"新导入 {stats['imported']} 台，跳过 {stats['skipped']} 台（已经导过）")
-    print(f"密码从凭据库复制 {stats['passwords']} 个；"
+    print(f"密码从凭据库复制/更新 {stats['passwords']} 个；"
           f"{stats['password_missing']} 个密码登录没找到凭据，连接时会再问")
     for name, alias, group in stats["names"]:
         extra = f"  [{group}]" if group else ""

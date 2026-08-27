@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.6 - 2026-08-26
+
+- Host Deck 0.3.2: feed remembered passwords through WSL ASKPASS, and reach Tabby hosts via a Windows TCP proxy.
+- Re-read Tabby passwords with UTF-8/base64 so stored secrets are not corrupted.
+
 ## 0.5.5 - 2026-08-26
 
 - Host Deck 0.3.1: on WSL, connect through Windows OpenSSH so Tabby-imported hosts use the Windows network path.

@@ -14,7 +14,8 @@ rm -f -- "${launcher_target}" "${host_target}"
 rm -f -- "${lib_dir}/ai_launcher.py" "${lib_dir}/host_deck.py" \
     "${lib_dir}/deck_tui.py" "${lib_dir}/host_secrets.py" \
     "${lib_dir}/tabby_import.py" \
-    "${lib_dir}/host_askpass.ps1" "${lib_dir}/host_askpass.cmd"
+    "${lib_dir}/host_askpass.ps1" "${lib_dir}/host_askpass.cmd" \
+    "${lib_dir}/winproxy.py"
 rmdir -- "${lib_dir}" 2>/dev/null || true
 printf 'Removed Agent Deck and Host Deck launchers.\n'
 

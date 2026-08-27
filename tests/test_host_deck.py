@@ -130,21 +130,20 @@ class HostDeckTests(unittest.TestCase):
         self.assertIn("exec bash -i", script)
         self.assertIn("ssh 退出码", script)
 
-    def test_windows_backend_uses_ssh_exe_and_user_host(self):
+    def test_windows_backend_uses_proxycommand_and_wsl_ssh(self):
         os.environ.pop("HOST_DECK_FORCE_WSL", None)
-        item = host.make_item("box-a", {
-            "via": "windows",
-            "hostname": "example.invalid",
-            "user": "linux",
-            "port": "2222",
-        })
-        with patch.object(host, "windows_ssh_exe", return_value="/mnt/c/Windows/System32/OpenSSH/ssh.exe"):
+        item = host.make_item("box-a", {"via": "windows"})
+        with patch.object(host, "windows_python", return_value="/mnt/c/Python/python.exe"), \
+                patch.object(host, "ensure_windows_proxy", return_value="C:/HostDeck/winproxy.py"), \
+                patch.object(host.secrets, "has_password", return_value=True):
             argv = host.build_ssh_argv(item, [])
-        self.assertTrue(argv[0].endswith("ssh.exe"))
-        self.assertIn("linux@example.invalid", argv)
-        self.assertIn("-p", argv)
-        self.assertIn("2222", argv)
-        self.assertNotIn("--", argv)
+        joined = " ".join(argv)
+        self.assertEqual(argv[0], "ssh")
+        self.assertIn("ProxyCommand=", joined)
+        self.assertIn("winproxy.py", joined)
+        self.assertIn("PubkeyAuthentication=no", joined)
+        self.assertIn("--", argv)
+        self.assertIn("box-a", argv)
 
     def test_attach_uses_named_tmux_session(self):
         item = host.make_item("box-a", {"tmux_session": "dev", "remote_dir": "/opt/app"})

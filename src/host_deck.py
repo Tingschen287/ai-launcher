@@ -38,7 +38,7 @@ from deck_tui import (
     action_row, fit_row, pad, pad_tail, ago,
 )
 
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 DEFAULT_COLOR = "#38bdf8"
 CONF = os.environ.get(
     "HOST_DECK_CONFIG",
@@ -827,8 +827,18 @@ def _win_to_wsl(win_path: str) -> str:
     return win_path
 
 
-def ensure_windows_askpass():
-    """把 askpass 拷到 Windows 用户目录，给 ssh.exe 调用。"""
+def windows_python():
+    for path in (
+        shutil.which("python.exe"),
+        *glob.glob("/mnt/c/Users/*/AppData/Local/Programs/Python/Python*/python.exe"),
+    ):
+        if path and os.path.isfile(path):
+            return path
+    return None
+
+
+def ensure_windows_file(name: str):
+    """把辅助脚本拷到 %LOCALAPPDATA%\\HostDeck。"""
     win_root, wsl_root = "", ""
     try:
         result = subprocess.run(
@@ -842,36 +852,47 @@ def ensure_windows_askpass():
         wsl_root = _win_to_wsl(win_root)
     else:
         for path in glob.glob("/mnt/c/Users/*/AppData/Local"):
-            name = path.split("/")[4]
-            if name not in ("Public", "Default", "Default User", "All Users"):
+            uname = path.split("/")[4]
+            if uname not in ("Public", "Default", "Default User", "All Users"):
                 wsl_root = path
-                win_root = f"C:\\Users\\{name}\\AppData\\Local"
+                win_root = f"C:\\Users\\{uname}\\AppData\\Local"
                 break
-    if not wsl_root or not os.path.isdir(os.path.dirname(wsl_root)):
+    if not wsl_root:
         return ""
     dest_dir = os.path.join(wsl_root, "HostDeck")
     os.makedirs(dest_dir, exist_ok=True)
-    src_dir = _HERE
-    for name in ("host_askpass.ps1", "host_askpass.cmd"):
-        src = os.path.join(src_dir, name)
-        dst = os.path.join(dest_dir, name)
-        if os.path.isfile(src):
-            shutil.copy2(src, dst)
-    return win_root.rstrip("\\") + "\\HostDeck\\host_askpass.cmd"
+    src = os.path.join(_HERE, name)
+    if os.path.isfile(src):
+        shutil.copy2(src, os.path.join(dest_dir, name))
+    return win_root.rstrip("\\") + "\\HostDeck\\" + name
 
 
-def use_windows_ssh(item):
+def ensure_windows_proxy():
+    path = ensure_windows_file("winproxy.py")
+    return path.replace("\\", "/") if path else ""
+
+
+def ensure_windows_askpass():
+    ensure_windows_file("host_askpass.ps1")
+    return ensure_windows_file("host_askpass.cmd")
+
+
+def use_windows_net(item):
     if os.environ.get("HOST_DECK_FORCE_WSL") == "1":
         return False
     via = (item.get("via") or "").lower()
     if via == "wsl":
         return False
-    exe = windows_ssh_exe()
-    if not exe:
+    if not (windows_python() or windows_ssh_exe()):
         return False
     if via == "windows":
         return True
     return bool(os.environ.get("WSL_DISTRO_NAME"))
+
+
+def use_windows_ssh(item):
+    """兼容旧名：是否走 Windows 网络。"""
+    return use_windows_net(item)
 
 
 def connection_target(item):
@@ -884,11 +905,29 @@ def connection_target(item):
 
 def build_ssh_argv(item, passthru, attach=False):
     remote = build_remote_command(item, attach)
-    if use_windows_ssh(item):
-        exe = windows_ssh_exe()
+    proxy_py = windows_python() if use_windows_net(item) else None
+    proxy_script = ensure_windows_proxy() if proxy_py else ""
+    argv = ["ssh", "-o", "ConnectTimeout=15"]
+    if proxy_py and proxy_script:
+        proxy = f"{shlex.quote(proxy_py)} {shlex.quote(proxy_script)} %h %p"
+        argv += ["-o", f"ProxyCommand={proxy}"]
+        if secrets.has_password(item["alias"]):
+            argv += [
+                "-o", "PreferredAuthentications=password",
+                "-o", "PubkeyAuthentication=no",
+            ]
+        if remote:
+            argv.append("-t")
+        argv.extend(passthru)
+        argv.append("--")
+        argv.append(item["alias"])
+        if remote:
+            argv.extend(["--", remote])
+        return argv
+    if use_windows_net(item) and windows_ssh_exe():
         hostname, user, port = connection_target(item)
         argv = [
-            exe,
+            windows_ssh_exe(),
             "-o", "ConnectTimeout=15",
             "-o", "StrictHostKeyChecking=accept-new",
         ]
@@ -901,7 +940,6 @@ def build_ssh_argv(item, passthru, attach=False):
         if remote:
             argv.append(remote)
         return argv
-    argv = ["ssh", "-o", "ConnectTimeout=15"]
     argv.extend(passthru)
     if remote:
         argv.append("-t")
@@ -921,10 +959,11 @@ def build_script(item, passthru, attach=False, use_askpass=None):
     quoted = " ".join(shlex.quote(part) for part in argv)
     title = tab_title(item, attach).replace("\x1b", "").replace("\x07", "")
     alias = item["alias"]
-    windows = use_windows_ssh(item)
+    windows = use_windows_net(item)
+    proxy = bool(windows and windows_python() and ensure_windows_proxy())
     if use_askpass is None:
         use_askpass = secrets.has_password(alias)
-    road = "Windows OpenSSH" if windows else "WSL OpenSSH"
+    road = "Windows 网络" if windows else "WSL OpenSSH"
     lines = [
         f"printf '\\033]0;{title}\\007'",
         f"printf '正在连接 {alias}（{road}）…\\n'",
@@ -932,17 +971,8 @@ def build_script(item, passthru, attach=False, use_askpass=None):
         '  printf "\\033[31m未找到 ssh / ssh.exe\\033[0m\\n"; exec bash -i',
         'fi',
     ]
-    if use_askpass and windows:
-        helper = ensure_windows_askpass()
-        if helper:
-            lines += [
-                f"export HOST_DECK_ASKPASS_ALIAS={shlex.quote(alias)}",
-                "export WSLENV=HOST_DECK_ASKPASS_ALIAS/u",
-                f"export SSH_ASKPASS={shlex.quote(helper)}",
-                "export SSH_ASKPASS_REQUIRE=force",
-                'export DISPLAY="${DISPLAY:-:0}"',
-            ]
-    elif use_askpass:
+    linux_askpass = use_askpass and (proxy or not windows)
+    if linux_askpass:
         helper = shlex.quote(askpass_path())
         lines += [
             f"export HOST_DECK_ASKPASS=1",
@@ -962,7 +992,7 @@ def build_script(item, passthru, attach=False, use_askpass=None):
         'if [ "$code" -ne 0 ]; then',
         f'  printf "\\n\\033[31mssh 退出码 $code\\033[0m  '
         f'\\033[33mshell 已保留，目标 {alias}\\033[0m\\n"',
-        f'  printf "\\033[33m连不上时：WSL 网络到不了这台机器，Host Deck 会改走 Windows ssh.exe。\\033[0m\\n"',
+        f'  printf "\\033[33m连不上时：会走 Windows 网络代理；密码来自系统凭据库。\\033[0m\\n"',
         "fi",
         "exec bash -i",
     ]

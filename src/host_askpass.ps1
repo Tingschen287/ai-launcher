@@ -36,7 +36,15 @@ if (-not [HostDeckAskPass]::CredRead($target, 1, 0, [ref]$ptr)) { exit 1 }
 try {
     $cred = [Runtime.InteropServices.Marshal]::PtrToStructure($ptr, [type][HostDeckAskPass+NativeCredential])
     if ($cred.CredentialBlob -eq [IntPtr]::Zero -or $cred.CredentialBlobSize -le 0) { exit 1 }
-    $secret = [Runtime.InteropServices.Marshal]::PtrToStringUni($cred.CredentialBlob, [int]($cred.CredentialBlobSize / 2))
+    $n = [int]$cred.CredentialBlobSize
+    $bytes = New-Object byte[] $n
+    [Runtime.InteropServices.Marshal]::Copy($cred.CredentialBlob, $bytes, 0, $n)
+    $utf8 = [Text.Encoding]::UTF8.GetString($bytes)
+    if ($utf8.IndexOf([char]0) -ge 0) {
+        $secret = [Text.Encoding]::Unicode.GetString($bytes).Trim([char]0)
+    } else {
+        $secret = $utf8.Trim([char]0)
+    }
     [Console]::Out.Write($secret)
     if (-not $secret.EndsWith("`n")) { [Console]::Out.Write("`n") }
 } finally {

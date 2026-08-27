@@ -3,6 +3,7 @@
 密码不进 hosts.toml、不进 ~/.ssh/config、不进 Git。
 """
 
+import base64
 import os
 import re
 import shutil
@@ -54,7 +55,14 @@ function Get-Password {
   try {
     $cred = [Runtime.InteropServices.Marshal]::PtrToStructure($ptr, [type][HostDeckCred+NativeCredential])
     if ($cred.CredentialBlob -eq [IntPtr]::Zero -or $cred.CredentialBlobSize -le 0) { return '' }
-    return [Runtime.InteropServices.Marshal]::PtrToStringUni($cred.CredentialBlob, [int]($cred.CredentialBlobSize / 2))
+    $n = [int]$cred.CredentialBlobSize
+    $bytes = New-Object byte[] $n
+    [Runtime.InteropServices.Marshal]::Copy($cred.CredentialBlob, $bytes, 0, $n)
+    $utf8 = [Text.Encoding]::UTF8.GetString($bytes)
+    if ($utf8.IndexOf([char]0) -ge 0) {
+      return [Text.Encoding]::Unicode.GetString($bytes).Trim([char]0)
+    }
+    return $utf8.Trim([char]0)
   } finally {
     [HostDeckCred]::CredFree($ptr) | Out-Null
   }
@@ -70,7 +78,9 @@ if ($mode -eq 'has') {
 if ($mode -eq 'get') {
   $secret = Get-Password
   if ($null -eq $secret) { exit 1 }
-  [Console]::Out.Write($secret)
+  $secret = $secret.Trim([char]0)
+  $utf8 = [Text.Encoding]::UTF8.GetBytes($secret)
+  [Console]::Out.Write([Convert]::ToBase64String($utf8))
   exit 0
 }
 if ($mode -eq 'delete') {
@@ -110,6 +120,18 @@ exit 2
 
 def cred_target(alias: str) -> str:
     return TARGET_PREFIX + alias
+
+
+def _decode_secret(blob) -> str | None:
+    raw = blob.decode("ascii", errors="ignore").strip() if isinstance(blob, (bytes, bytearray)) else str(blob).strip()
+    if not raw:
+        return None
+    try:
+        text = base64.b64decode(raw, validate=False).decode("utf-8")
+        return text.rstrip("\r\n\0") or None
+    except Exception:
+        text = blob.decode("utf-8", errors="replace") if isinstance(blob, (bytes, bytearray)) else str(blob)
+        return text.rstrip("\r\n\0") or None
 
 
 def _secrets_dir():
@@ -189,7 +211,7 @@ def get_windows_secret(target: str) -> str | None:
         return None
     if result.returncode != 0:
         return None
-    secret = result.stdout.decode("utf-8", errors="replace")
+    secret = _decode_secret(result.stdout)
     return secret if secret else None
 
 
@@ -209,7 +231,7 @@ def get_password(alias: str) -> str | None:
         return None
     if result.returncode != 0:
         return None
-    return result.stdout.decode("utf-8", errors="replace")
+    return _decode_secret(result.stdout)
 
 
 def store_password(alias: str, password: str, user: str = "") -> None:
