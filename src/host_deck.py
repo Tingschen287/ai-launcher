@@ -793,7 +793,7 @@ def pick_new_host(term, cfg, existing=None):
             status_right(len(cfg.get("hosts") or {})),
             rows, visual_sel,
             "↑↓ 换项 · 输入文字 · Enter 保存/下一项 · Esc 取消",
-            box_max=100,
+            box_max=88,
         )
         kind, *rest = term.key()
         if kind == "mouse":
@@ -915,9 +915,8 @@ def pick_host(term, items, cfg, attach=False):
         visual_sel = hover if hover is not None else sel
         hint = ("输入筛选 · Enter 连接 · Esc 退出搜索" if search_mode else
                 "↑↓ 选 · Enter/▶ 连接 · ✎/e 编辑 · 分组回车折叠 · n 新建 · / 搜索 · q 退出")
-        cols, _rows_h = shutil.get_terminal_size((100, 30))
         geom = draw(title, status_right(len(items)), rows, visual_sel, hint, tab_regions,
-                    box_max=max(88, cols - 8))
+                    box_max=88)
         kind, *rest = term.key()
         if kind == "mouse":
             row, col, action = rest
