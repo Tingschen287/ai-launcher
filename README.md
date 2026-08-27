@@ -23,8 +23,8 @@ GitHub 仓库名是 `terminal-deck`。当前运行时是 WSL + Windows Terminal�
 ## 安装
 
 ```bash
-git clone https://github.com/Tingschen287/ai-launcher.git
-cd ai-launcher
+git clone https://github.com/Tingschen287/terminal-deck.git
+cd terminal-deck
 ./scripts/install.sh
 ```
 
