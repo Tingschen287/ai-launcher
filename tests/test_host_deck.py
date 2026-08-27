@@ -47,11 +47,15 @@ class HostDeckTests(unittest.TestCase):
         host.FAV = str(root / "favorites.txt")
         host.SSH_CONFIG = str(self.ssh_config)
         os.environ["HOST_DECK_SKIP_SSH_G"] = "1"
+        os.environ["HOST_DECK_SECRETS_DIR"] = str(root / "secrets")
+        host.secrets._HAS_CACHE.clear()
 
     def tearDown(self):
         for key, value in self.old.items():
             setattr(host, key, value)
         os.environ.pop("HOST_DECK_SKIP_SSH_G", None)
+        os.environ.pop("HOST_DECK_SECRETS_DIR", None)
+        host.secrets._HAS_CACHE.clear()
 
     def write_ssh(self, text, path=None):
         target = Path(path or self.ssh_config)
@@ -215,6 +219,81 @@ class HostDeckTests(unittest.TestCase):
             self.assertIn("-- -v", inner)
         finally:
             os.environ.pop("HOST_DECK_HANDOFF", None)
+
+    def test_create_host_writes_ssh_and_meta_but_not_password(self):
+        item, errors = host.create_host({
+            "alias": "box-a",
+            "hostname": "example.invalid",
+            "user": "linux",
+            "port": "2222",
+            "identity": "~/.ssh/id_ed25519",
+            "name": "开发机",
+            "group": "dev",
+            "password": "secret-value-xyz",
+        })
+        self.assertEqual(errors, [])
+        self.assertEqual(item["alias"], "box-a")
+        ssh_text = Path(host.SSH_CONFIG).read_text(encoding="utf-8")
+        self.assertIn("Host box-a", ssh_text)
+        self.assertIn("HostName example.invalid", ssh_text)
+        self.assertIn("Port 2222", ssh_text)
+        self.assertIn("IdentityFile", ssh_text)
+        self.assertNotIn("secret-value-xyz", ssh_text)
+        self.assertNotIn("Password", ssh_text)
+        meta = Path(host.CONF).read_text(encoding="utf-8").lower()
+        self.assertIn('alias = "box-a"', meta)
+        self.assertNotIn("secret-value-xyz", meta)
+        self.assertNotIn("password =", meta)
+        self.assertEqual(host.secrets.get_password("box-a"), "secret-value-xyz")
+
+    def test_create_host_rejects_duplicate_alias(self):
+        self.write_ssh("Host box-a\n")
+        item, errors = host.create_host({
+            "alias": "box-a",
+            "hostname": "example.invalid",
+        })
+        self.assertIsNone(item)
+        self.assertTrue(any("已存在" in item for item in errors))
+
+    def test_create_host_appends_without_clobbering(self):
+        self.write_ssh("Host keep-me\n    HostName old.example\n")
+        item, errors = host.create_host({
+            "alias": "box-b",
+            "hostname": "new.example",
+        })
+        self.assertEqual(errors, [])
+        text = Path(host.SSH_CONFIG).read_text(encoding="utf-8")
+        self.assertIn("Host keep-me", text)
+        self.assertIn("Host box-b", text)
+        self.assertIn("HostName old.example", text)
+
+    def test_build_script_uses_askpass_only_when_password_stored(self):
+        item = host.make_item("box-a")
+        plain = host.build_script(item, [])
+        self.assertNotIn("SSH_ASKPASS", plain)
+        host.secrets.store_password("box-a", "secret-value-xyz")
+        wrapped = host.build_script(item, [])
+        self.assertIn("SSH_ASKPASS", wrapped)
+        self.assertIn("SSH_ASKPASS_REQUIRE=force", wrapped)
+        self.assertIn("HOST_DECK_ASKPASS_ALIAS=box-a", wrapped)
+        self.assertNotIn("secret-value-xyz", wrapped)
+
+    def test_new_host_form_saves_with_keyboard(self):
+        geometry = {"rows": {}, "tabs": [], "left": 0, "width": 40}
+        keys = list("boxa") + ["\t"] + list("example.test") + ["\t"] * 7 + ["\r"]
+        with patch.object(host, "draw", return_value=geometry):
+            ok = host.pick_new_host(FakeTerm(*keys), host.default_config())
+        self.assertTrue(ok)
+        self.assertIn("boxa", host.discover_aliases())
+
+    def test_n_opens_new_host_form_and_esc_cancels(self):
+        geometry = {"rows": {}, "tabs": [], "left": 0, "width": 40}
+        with patch.object(host, "draw", return_value=geometry), \
+                patch.object(host, "fill_summaries"):
+            result = host.pick_host(
+                FakeTerm("n", "esc", "q"), [], host.default_config())
+        self.assertIsNone(result)
+        self.assertFalse(Path(host.SSH_CONFIG).exists())
 
     def test_menu_sections_put_favorites_first(self):
         items = [

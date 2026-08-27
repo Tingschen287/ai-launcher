@@ -8,8 +8,8 @@
   host --list             打印发现的主机
   host dev-box -- -v      额外参数原样传给 ssh
 
-连接事实以 ~/.ssh/config 为准。本配置只保存分组、颜色、收藏等编排信息，
-不保存密码、私钥或 token。
+连接事实以 ~/.ssh/config 为准。本配置只保存分组、颜色、收藏等编排信息。
+密码进系统凭据库，不进配置文件。
 配置：~/.config/host-deck/hosts.toml（可用 HOST_DECK_CONFIG 覆盖）
 历史：~/.local/share/host-deck/history.tsv
 """
@@ -30,13 +30,14 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 import deck_tui as tui
+import host_secrets as secrets
 from deck_tui import (
-    HOME, ESC, FG, RESET, BOLD, DIM, MUTED, TEXT,
+    HOME, ESC, FG, RESET, BOLD, DIM, MUTED, TEXT, GREEN,
     YELLOW, RED, SELBG, Term, draw, hit, hit_tab, tab_header,
     action_row, fit_row, pad, pad_tail, ago,
 )
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 DEFAULT_COLOR = "#38bdf8"
 CONF = os.environ.get(
     "HOST_DECK_CONFIG",
@@ -59,6 +60,17 @@ HIST_SHOW = 8
 BANNED_KEYS = (
     "password", "passphrase", "identityfile", "identity_file",
     "privatekey", "private_key", "token", "secret", "credential",
+)
+ALIAS_RE = re.compile(r"^[A-Za-z0-9_.:-]+$")
+NEW_HOST_FIELDS = (
+    ("alias", "别名", False, "ssh config 的 Host"),
+    ("hostname", "主机", False, "IP 或域名"),
+    ("user", "用户", False, "可空"),
+    ("port", "端口", False, "默认 22"),
+    ("identity", "密钥", False, "私钥路径，可空"),
+    ("name", "显示名", False, "默认与别名相同"),
+    ("group", "分组", False, "如 prod / dev"),
+    ("password", "密码", True, "进系统凭据库，可空"),
 )
 
 
@@ -306,6 +318,121 @@ def build_items(cfg):
     return items
 
 
+def _toml_quote(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _ssh_config_value(value: str) -> str:
+    if any(char.isspace() for char in value) or value[:1] in "\"'":
+        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return value
+
+
+def validate_draft(draft):
+    alias = (draft.get("alias") or "").strip()
+    hostname = (draft.get("hostname") or "").strip()
+    user = (draft.get("user") or "").strip()
+    port = (draft.get("port") or "").strip()
+    identity = (draft.get("identity") or "").strip()
+    name = (draft.get("name") or "").strip()
+    group = (draft.get("group") or "").strip()
+    password = draft.get("password") or ""
+    errors = []
+    if not alias:
+        errors.append("请填写别名")
+    elif not ALIAS_RE.fullmatch(alias):
+        errors.append("别名只能用字母、数字、点、冒号、下划线和连字符")
+    elif alias in discover_aliases():
+        errors.append(f"别名已存在：{alias}")
+    if not hostname:
+        errors.append("请填写主机")
+    elif any(char.isspace() for char in hostname):
+        errors.append("主机不能包含空格")
+    if port:
+        if not port.isdigit() or not (1 <= int(port) <= 65535):
+            errors.append("端口必须是 1-65535")
+    if identity and identity.startswith("-"):
+        errors.append("密钥路径无效")
+    cleaned = {
+        "alias": alias,
+        "hostname": hostname,
+        "user": user,
+        "port": "" if not port or port == "22" else port,
+        "identity": identity,
+        "name": name or alias,
+        "group": group,
+        "password": password,
+        "color": DEFAULT_COLOR,
+    }
+    return errors, cleaned
+
+
+def append_ssh_block(host):
+    path = SSH_CONFIG
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    lines = [f"Host {host['alias']}", f"    HostName {_ssh_config_value(host['hostname'])}"]
+    if host.get("user"):
+        lines.append(f"    User {_ssh_config_value(host['user'])}")
+    if host.get("port"):
+        lines.append(f"    Port {host['port']}")
+    if host.get("identity"):
+        lines.append(f"    IdentityFile {_ssh_config_value(host['identity'])}")
+    block = "\n".join(lines) + "\n"
+    created = not os.path.exists(path)
+    prefix = ""
+    if os.path.isfile(path):
+        with open(path, encoding="utf-8") as handle:
+            current = handle.read()
+        if current and not current.endswith("\n"):
+            prefix = "\n"
+        prefix += "\n"
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(prefix + block)
+    if created:
+        os.chmod(path, 0o600)
+
+
+def append_host_meta(host):
+    os.makedirs(os.path.dirname(CONF), exist_ok=True)
+    cfg = load_config()
+    if host["alias"] in cfg["hosts"]:
+        return
+    lines = [
+        "",
+        "[[host]]",
+        f"alias = {_toml_quote(host['alias'])}",
+        f"name = {_toml_quote(host['name'])}",
+        f"group = {_toml_quote(host.get('group') or '')}",
+        f"color = {_toml_quote(host.get('color') or DEFAULT_COLOR)}",
+        "",
+    ]
+    with open(CONF, "a", encoding="utf-8") as handle:
+        handle.write("\n".join(lines))
+
+
+def create_host(draft):
+    """追加 SSH Host 与 Host Deck 元数据。密码只进凭据库。"""
+    errors, cleaned = validate_draft(draft)
+    if errors:
+        return None, errors
+    password = cleaned.get("password") or ""
+    if password:
+        try:
+            secrets.store_password(
+                cleaned["alias"], password, user=cleaned.get("user") or "")
+        except Exception as exc:
+            return None, [f"密码没写进凭据库：{exc}"]
+        cleaned["password"] = ""
+    try:
+        append_ssh_block(cleaned)
+        append_host_meta(cleaned)
+    except Exception as exc:
+        if password:
+            secrets.delete_password(cleaned["alias"])
+        return None, [str(exc)]
+    return make_item(cleaned["alias"], cleaned), []
+
+
 def item_matches(item, query):
     needle = query.lower()
     hay = " ".join([
@@ -397,7 +524,105 @@ def section_row(title):
     return render
 
 
-# ─────────────────────────── 交互 ───────────────────────────
+def field_row(label, value, secret=False, placeholder=""):
+    def render(selected):
+        mark = f"{FG(DEFAULT_COLOR)}▸{RESET}" if selected else " "
+        bg = SELBG if selected else ""
+        shown = ("•" * len(value)) if secret else value
+        color = TEXT
+        if not shown:
+            shown = placeholder
+            color = DIM
+        cursor = f"{FG(DEFAULT_COLOR)}█{RESET}" if selected else ""
+        body = (
+            f"{bg}  {mark}{bg} {DIM}{pad(label, 8)}{RESET}{bg} "
+            f"{color}{BOLD if selected else ''}{pad(shown, max(tui.BOX_W - 16, 12))}{RESET}{bg}"
+            f"{cursor}{bg}"
+        )
+        return fit_row(body)
+    return render
+
+
+def pick_new_host(term, cfg):
+    draft = {key: "" for key, _label, _secret, _hint in NEW_HOST_FIELDS}
+    draft["port"] = "22"
+    sel = 0
+    hover = None
+    error = ""
+    save_idx = len(NEW_HOST_FIELDS)
+    cancel_idx = save_idx + 1
+    total = cancel_idx + 1
+    while True:
+        rows = []
+        for i, (key, label, secret, hint) in enumerate(NEW_HOST_FIELDS):
+            placeholder = hint if not draft[key] else ""
+            rows.append((True, field_row(label, draft[key], secret, placeholder or hint)))
+        rows.append((False, lambda _s: ""))
+        if error:
+            rows.append((False, lambda _s, error=error: f"    {RED}{error}{RESET}"))
+        rows.append((True, action_row("+", "保存", "写入 ssh config，密码进凭据库", GREEN)))
+        rows.append((True, action_row("×", "取消", "不保存", DEFAULT_COLOR)))
+        visual_sel = hover if hover is not None else sel
+        geom = draw(
+            f"{TEXT}{BOLD}Host Deck{RESET}{DIM} › 新连接{RESET}",
+            status_right(len(cfg.get("hosts") or {})),
+            rows, visual_sel,
+            "↑↓ 换项 · 输入文字 · Enter 保存/下一项 · Esc 取消",
+        )
+        kind, *rest = term.key()
+        if kind == "mouse":
+            row, col, action = rest
+            index = hit(geom, row, col)
+            if action == "move":
+                hover = index
+            elif action == "click" and index is not None:
+                if index == save_idx:
+                    item, errors = create_host(draft)
+                    if item is None:
+                        error = "；".join(errors)
+                    else:
+                        return True
+                elif index == cancel_idx:
+                    return False
+                else:
+                    sel = index
+            continue
+        hover = None
+        key = rest[0]
+        if key in ("up",):
+            sel = (sel - 1) % total
+        elif key in ("down",):
+            sel = (sel + 1) % total
+        elif key in ("esc", "\x03"):
+            return False
+        elif key in ("\t",):
+            sel = (sel + 1) % total
+        elif key in ("\r", "\n"):
+            if sel == save_idx:
+                item, errors = create_host(draft)
+                if item is None:
+                    error = "；".join(errors)
+                else:
+                    return True
+            elif sel == cancel_idx:
+                return False
+            else:
+                sel = min(sel + 1, save_idx)
+        elif sel >= save_idx:
+            continue
+        elif key in ("\x7f", "\b"):
+            field = NEW_HOST_FIELDS[sel][0]
+            draft[field] = draft[field][:-1]
+            error = ""
+        elif key == "\x15":
+            field = NEW_HOST_FIELDS[sel][0]
+            draft[field] = ""
+            error = ""
+        elif key and len(key) == 1 and key.isprintable():
+            field = NEW_HOST_FIELDS[sel][0]
+            draft[field] += key
+            error = ""
+
 
 def pick_host(term, items, cfg, attach=False):
     sel = 0
@@ -433,18 +658,21 @@ def pick_host(term, items, cfg, attach=False):
         if not selectable and not search_mode:
             rows.append((False, lambda _s: f"    {DIM}没有发现 SSH Host 别名{RESET}"))
             rows.append((False, lambda _s: (
-                f"    {DIM}在 ~/.ssh/config 添加 Host，或按 / 输入目标{RESET}"
+                f"    {DIM}按 n 添加连接，或按 / 输入目标{RESET}"
             )))
             rows.append((False, lambda _s: ""))
         search_idx = len(selectable)
+        add_idx = search_idx + 1
         rows.append((True, action_row(
             "/", "搜索 / 输入目标", "别名、分组，或 user@host", color)))
-        if sel >= search_idx + 1:
+        rows.append((True, action_row(
+            "+", "新连接", "写入 ssh config，可记密码", color)))
+        if sel >= add_idx + 1:
             sel = 0
         title, tab_regions = header_line(attach, tab_hover, color)
         visual_sel = hover if hover is not None else sel
         hint = ("输入筛选 · Enter 连接 · Esc 退出搜索" if search_mode else
-                "↑↓/鼠标 选 · Enter 连接 · 1-9 直达 · / 搜索 · f 收藏 · q 退出")
+                "↑↓/鼠标 选 · Enter 连接 · n 新连接 · / 搜索 · f 收藏 · q 退出")
         geom = draw(title, status_right(len(items)), rows, visual_sel, hint, tab_regions)
         kind, *rest = term.key()
         if kind == "mouse":
@@ -462,6 +690,9 @@ def pick_host(term, items, cfg, attach=False):
                     return selectable[index], attach
                 if index == search_idx:
                     search_mode, error = True, ""
+                elif index == add_idx:
+                    if pick_new_host(term, cfg):
+                        return "reload", attach
             continue
         hover = None
         tab_hover = None
@@ -489,14 +720,17 @@ def pick_host(term, items, cfg, attach=False):
                 error, sel = "", 0
             continue
         if key in ("up", "k"):
-            sel = (sel - 1) % (search_idx + 1)
+            sel = (sel - 1) % (add_idx + 1)
         elif key in ("down", "j"):
-            sel = (sel + 1) % (search_idx + 1)
+            sel = (sel + 1) % (add_idx + 1)
         elif key in ("\r", "\n", "right", "l"):
             if sel < len(selectable):
                 return selectable[sel], attach
             if sel == search_idx:
                 search_mode, error = True, ""
+            elif sel == add_idx:
+                if pick_new_host(term, cfg):
+                    return "reload", attach
         elif len(key) == 1 and "1" <= key <= "9" and int(key) <= len(selectable):
             return selectable[int(key) - 1], attach
         elif key == "a":
@@ -509,6 +743,9 @@ def pick_host(term, items, cfg, attach=False):
             toggle_favorite(selectable[sel]["alias"], cfg)
         elif key in ("/", "e"):
             search_mode, error = True, ""
+        elif key == "n":
+            if pick_new_host(term, cfg):
+                return "reload", attach
         elif key in ("q", "\x03", "esc"):
             return None
 
@@ -557,17 +794,39 @@ def build_ssh_argv(item, passthru, attach=False):
     return argv
 
 
-def build_script(item, passthru, attach=False):
+def askpass_path():
+    return os.path.realpath(__file__)
+
+
+def build_script(item, passthru, attach=False, use_askpass=None):
     argv = build_ssh_argv(item, passthru, attach)
     quoted = " ".join(shlex.quote(part) for part in argv)
     title = tab_title(item, attach).replace("\x1b", "").replace("\x07", "")
     alias = item["alias"]
+    if use_askpass is None:
+        use_askpass = secrets.has_password(alias)
     lines = [
         f"printf '\\033]0;{title}\\007'",
         f"printf '  {('↻ ' if attach else '')}ssh {alias}\\n'",
         'if ! command -v ssh >/dev/null 2>&1; then',
         '  printf "\\033[31m未找到命令 ssh\\033[0m\\n"; exec bash -i',
         'fi',
+    ]
+    if use_askpass:
+        helper = shlex.quote(askpass_path())
+        lines += [
+            f"export HOST_DECK_ASKPASS=1",
+            f"export HOST_DECK_ASKPASS_ALIAS={shlex.quote(alias)}",
+            f"export SSH_ASKPASS={helper}",
+            "export SSH_ASKPASS_REQUIRE=force",
+            'export DISPLAY="${DISPLAY:-:0}"',
+        ]
+        if os.environ.get("HOST_DECK_SECRETS_DIR"):
+            lines.append(
+                "export HOST_DECK_SECRETS_DIR="
+                + shlex.quote(os.environ["HOST_DECK_SECRETS_DIR"])
+            )
+    lines += [
         quoted,
         "code=$?",
         'if [ "$code" -ne 0 ]; then',
@@ -648,7 +907,7 @@ def print_list(cfg):
     items = build_items(cfg)
     fill_summaries(items)
     if not items:
-        print("没有发现 SSH Host 别名。请在 ~/.ssh/config 添加 Host 段。")
+        print("没有发现 SSH Host 别名。运行 `host` 后按 n 添加，或编辑 ~/.ssh/config。")
         return
     for item in items:
         star = "*" if item.get("favorite") else " "
@@ -660,6 +919,9 @@ def print_list(cfg):
 # ─────────────────────────── 入口 ───────────────────────────
 
 def main():
+    if os.environ.get("HOST_DECK_ASKPASS") == "1":
+        sys.exit(secrets.run_askpass())
+
     args = sys.argv[1:]
     passthru = []
     if "--" in args:
@@ -708,6 +970,11 @@ def main():
             if choice is None:
                 return
             item, attach = choice
+            if item == "reload":
+                cfg = load_config()
+                items = build_items(cfg)
+                want_attach = attach
+                continue
             result = launch(item, passthru, attach, cfg)
             if result != "handoff":
                 return

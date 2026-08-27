@@ -11,7 +11,8 @@ host_history_target="${HOME}/.local/share/host-deck/history.tsv"
 host_favorites_target="${HOME}/.local/share/host-deck/favorites.txt"
 
 rm -f -- "${launcher_target}" "${host_target}"
-rm -f -- "${lib_dir}/ai_launcher.py" "${lib_dir}/host_deck.py" "${lib_dir}/deck_tui.py"
+rm -f -- "${lib_dir}/ai_launcher.py" "${lib_dir}/host_deck.py" \
+    "${lib_dir}/deck_tui.py" "${lib_dir}/host_secrets.py"
 rmdir -- "${lib_dir}" 2>/dev/null || true
 printf 'Removed Agent Deck and Host Deck launchers.\n'
 

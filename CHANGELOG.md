@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3 - 2026-08-26
+
+- Host Deck 0.2.0: add a New Connection form that appends a Host block to `~/.ssh/config`.
+- Remember SSH passwords in the OS credential store and feed them to OpenSSH via SSH_ASKPASS.
+- Keep passwords out of Host Deck config files and Git.
+
 ## 0.5.2 - 2026-08-26
 
 - Extract shared terminal TUI primitives into `src/deck_tui.py`.

@@ -13,6 +13,7 @@ host_config_target="${host_config_dir}/hosts.toml"
 
 install -d "${bin_dir}" "${lib_dir}" "${config_dir}" "${host_config_dir}"
 install -m 0644 "${repo_dir}/src/deck_tui.py" "${lib_dir}/deck_tui.py"
+install -m 0644 "${repo_dir}/src/host_secrets.py" "${lib_dir}/host_secrets.py"
 install -m 0755 "${repo_dir}/src/ai_launcher.py" "${lib_dir}/ai_launcher.py"
 install -m 0755 "${repo_dir}/src/host_deck.py" "${lib_dir}/host_deck.py"
 ln -sfn "${lib_dir}/ai_launcher.py" "${launcher_target}"

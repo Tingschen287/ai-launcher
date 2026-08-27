@@ -158,7 +158,7 @@ wt_profile = "Codex (WSL)"
 
 ## Host Deck
 
-`host` 负责发现、分组、选择和启动 SSH 连接，不替代 OpenSSH，也不保存凭据。
+`host` 负责发现、分组、选择和启动 SSH 连接，不替代 OpenSSH。连接参数仍写在 `~/.ssh/config`。密码进系统凭据库，不进配置文件。
 
 ```text
 host                       选择主机后连接
@@ -169,6 +169,8 @@ host --list                查看发现的主机
 host --version             查看版本
 ```
 
+选择器里按 `n`，或点 `+ 新连接`，可以追加一台主机：别名、主机、用户、端口、密钥路径、显示名、分组、密码。别名会写入 `~/.ssh/config` 末尾，不改已有 Host。密码写入 Windows 凭据库（测试可用 `HOST_DECK_SECRETS_DIR`），连接时通过 `SSH_ASKPASS` 交给 `ssh`。主机密钥确认不会自动点 yes。
+
 标题栏提供 `Connect | Attach` 两个模式 Tab，默认 `Connect`：
 
 - `Connect`：普通 SSH 连接
@@ -177,7 +179,7 @@ host --version             查看版本
 
 主机列表来自 `~/.ssh/config` 的 `Host` 别名（跟随 `Include`，跳过 `*` 等通配）。需要最终连接参数时调用 `ssh -G <alias>`，不自己解析 HostName/User/Port/IdentityFile。
 
-Host Deck 自己的配置位于 `~/.config/host-deck/hosts.toml`，只保存显示名、分组、颜色、收藏、默认远程目录、连接后命令和 tmux 会话名。可用 `HOST_DECK_CONFIG` 覆盖。安装时若该文件不存在，会写入不含主机条目的 bootstrap 配置；完整字段见 [`config/hosts.example.toml`](config/hosts.example.toml)。
+Host Deck 自己的配置位于 `~/.config/host-deck/hosts.toml`，只保存显示名、分组、颜色、收藏、默认远程目录、连接后命令和 tmux 会话名。可用 `HOST_DECK_CONFIG` 覆盖。安装时若该文件不存在，会写入不含主机条目的 bootstrap 配置；完整字段见 [`config/hosts.example.toml`](config/hosts.example.toml)。不要把密码写进这个文件。
 
 从 `Host Deck` Profile 进入时，会在同一窗口用隐藏的 `SSH (WSL)` Profile 打开连接页签，并设置页签标题。连接失败后保留 Shell。选择器页签会留下，方便再连下一台。
 
