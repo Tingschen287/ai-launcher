@@ -20,7 +20,7 @@ Agent Deck 负责选择和编排，Claude/Codex/Grok/Kimi 仍是原生 CLI；同
 - 版本：`0.5.1`
 - CLI：`ai`
 - Git 仓库：`git@github.com:Tingschen287/terminal-deck.git`
-- 本地仓库：`/home/linux/dev/ai/05.code/github/Tingschen287/ai-launcher`
+- 本地仓库：`/home/linux/dev/ai/05.code/github/Tingschen287/terminal-deck`
 - 当前提交：`8a1e760 chore: rename launcher to Agent Deck`
 - 主程序：`src/ai_launcher.py`
 - 已安装程序：`/home/linux/.local/bin/ai`
