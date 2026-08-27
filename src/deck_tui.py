@@ -212,25 +212,33 @@ def tab_header(prefix_plain, prefix, labels, active, hover=None, color="#e5e7eb"
     return "".join(parts), regions
 
 
-def draw(header_title, header_right, rows, sel, footer, header_regions=None):
+def draw(header_title, header_right, rows, sel, footer, header_regions=None,
+         box_max=72):
     """rows: [(可选中?, 渲染函数(selected)->str)]。
 
     整块内容在终端里水平 + 垂直居中。返回几何信息，供鼠标命中判定和
     路径输入行定位使用。
+    render 可挂 hotspots: [{"kind", "start", "end"}]，坐标相对该行内容
+    （0 起，按显示宽度）。
     """
     global BOX_W
     cols, rows_h = shutil.get_terminal_size((100, 30))
-    BOX_W = max(52, min(72, cols - 6))
+    cap = 72 if box_max is None else max(52, box_max)
+    BOX_W = max(52, min(cap, cols - 6))
     width = BOX_W + 2                       # 卡片总宽（含边框）
 
     lines = frame(header_title, header_right)
     lines.append("")
     rowmap = {}
+    pending = []
     idx = 0
     for selectable, render in rows:
         if selectable:
             rowmap[len(lines)] = idx        # 先记块内偏移，稍后加上 top
             lines.append(render(idx == sel))
+            spots = getattr(render, "hotspots", None)
+            if spots:
+                pending.append((len(lines) - 1, idx, spots))
             idx += 1
         else:
             lines.append(render(False))
@@ -254,8 +262,19 @@ def draw(header_title, header_right, rows, sel, footer, header_regions=None):
          "row": top + 2}
         for region in (header_regions or [])
     ]
+    cells = []
+    for v_row, index, spots in pending:
+        screen_row = v_row + top + 1
+        for spot in spots:
+            cells.append({
+                "row": screen_row,
+                "start": left + spot["start"] + 1,
+                "end": left + spot["end"] + 1,
+                "kind": spot["kind"],
+                "index": index,
+            })
     return {"rows": {v_row + top + 1: i for v_row, i in rowmap.items()},
-            "tabs": tabs, "left": left, "width": width,
+            "tabs": tabs, "cells": cells, "left": left, "width": width,
             "bottom": top + len(lines)}
 
 
@@ -270,6 +289,13 @@ def hit_tab(geom, row, col):
     for region in geom.get("tabs", []):
         if row == region["row"] and region["start"] <= col <= region["end"]:
             return region["mode"]
+    return None
+
+
+def hit_cell(geom, row, col):
+    for cell in geom.get("cells") or []:
+        if row == cell["row"] and cell["start"] <= col <= cell["end"]:
+            return cell
     return None
 
 

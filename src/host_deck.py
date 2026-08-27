@@ -34,11 +34,11 @@ import deck_tui as tui
 import host_secrets as secrets
 from deck_tui import (
     HOME, ESC, FG, RESET, BOLD, DIM, MUTED, TEXT,
-    YELLOW, RED, SELBG, Term, draw, hit, hit_tab, tab_header,
-    action_row, fit_row, pad, pad_tail, ago,
+    YELLOW, RED, SELBG, Term, draw, hit, hit_tab, hit_cell, tab_header,
+    action_row, fit_row, pad, pad_tail, ago, dwidth,
 )
 
-VERSION = "0.3.2"
+VERSION = "0.4.0"
 DEFAULT_COLOR = "#38bdf8"
 CONF = os.environ.get(
     "HOST_DECK_CONFIG",
@@ -56,6 +56,12 @@ SSH_CONFIG = os.environ.get(
     "HOST_DECK_SSH_CONFIG",
     os.path.join(HOME, ".ssh", "config"),
 )
+COLLAPSED = os.environ.get(
+    "HOST_DECK_COLLAPSED",
+    os.path.join(HOME, ".local", "share", "host-deck", "collapsed.txt"),
+)
+PLAY_BTN = " ▶ "
+EDIT_BTN = " ✎ "
 HIST_KEEP = 24
 HIST_SHOW = 8
 BANNED_KEYS = (
@@ -274,6 +280,32 @@ def write_favorites(aliases):
     os.replace(tmp, FAV)
 
 
+def read_collapsed():
+    if not os.path.exists(COLLAPSED):
+        return set()
+    with open(COLLAPSED, encoding="utf-8") as handle:
+        return {line.strip() for line in handle if line.strip()}
+
+
+def write_collapsed(names):
+    os.makedirs(os.path.dirname(COLLAPSED), exist_ok=True)
+    tmp = COLLAPSED + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        for name in sorted(names):
+            handle.write(name + "\n")
+    os.replace(tmp, COLLAPSED)
+
+
+def toggle_collapsed(title):
+    current = read_collapsed()
+    if title in current:
+        current.remove(title)
+    else:
+        current.add(title)
+    write_collapsed(current)
+    return current
+
+
 def toggle_favorite(alias, cfg):
     current = read_favorites(cfg)
     if alias in current:
@@ -348,7 +380,7 @@ def validate_draft(draft):
         errors.append("请填写别名")
     elif not ALIAS_RE.fullmatch(alias):
         errors.append("别名只能用字母、数字、点、冒号、下划线和连字符")
-    elif alias in discover_aliases():
+    elif alias in discover_aliases() and alias != (draft.get("_orig_alias") or ""):
         errors.append(f"别名已存在：{alias}")
     if not hostname:
         errors.append("请填写主机")
@@ -402,6 +434,94 @@ def append_ssh_block(host, comment=""):
         os.chmod(path, 0o600)
 
 
+def replace_ssh_block(old_alias, host):
+    path = SSH_CONFIG
+    if not os.path.isfile(path):
+        append_ssh_block(host)
+        return
+    with open(path, encoding="utf-8") as handle:
+        lines = handle.readlines()
+    start = None
+    for i, line in enumerate(lines):
+        if re.match(rf"^Host\s+{re.escape(old_alias)}(?:\s|$)", line):
+            start = i
+            if i > 0 and lines[i - 1].startswith("# host-deck tabby:"):
+                start = i - 1
+            break
+    if start is None:
+        append_ssh_block(host)
+        return
+    end = start + 1
+    while end < len(lines):
+        if re.match(r"^Host\s+", lines[end]) or lines[end].startswith("# host-deck tabby:"):
+            break
+        end += 1
+    comment = ""
+    if lines[start].startswith("# host-deck tabby:"):
+        comment = lines[start].rstrip("\n")
+    new_lines = []
+    if comment:
+        new_lines.append(comment + "\n")
+    new_lines.append(f"Host {host['alias']}\n")
+    new_lines.append(f"    HostName {_ssh_config_value(host['hostname'])}\n")
+    if host.get("user"):
+        new_lines.append(f"    User {_ssh_config_value(host['user'])}\n")
+    if host.get("port"):
+        new_lines.append(f"    Port {host['port']}\n")
+    if host.get("identity"):
+        new_lines.append(f"    IdentityFile {_ssh_config_value(host['identity'])}\n")
+    text = "".join(lines[:start] + new_lines + lines[end:])
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        handle.write(text)
+    os.replace(tmp, path)
+
+
+def write_host_config(cfg):
+    os.makedirs(os.path.dirname(CONF), exist_ok=True)
+    lines = [
+        f"wt_profile = {_toml_quote(cfg.get('wt_profile') or 'SSH (WSL)')}",
+        f"default_tmux_session = {_toml_quote(cfg.get('default_tmux_session') or '')}",
+        "",
+    ]
+    for meta in cfg.get("hosts", {}).values():
+        lines += [
+            "[[host]]",
+            f"alias = {_toml_quote(meta['alias'])}",
+            f"name = {_toml_quote(meta.get('name') or meta['alias'])}",
+            f"group = {_toml_quote(meta.get('group') or '')}",
+            f"color = {_toml_quote(meta.get('color') or DEFAULT_COLOR)}",
+            f"via = {_toml_quote(meta.get('via') or '')}",
+            "",
+        ]
+    tmp = CONF + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(lines).rstrip() + "\n")
+    os.replace(tmp, CONF)
+
+
+def upsert_host_meta(host):
+    cfg = load_config()
+    old = None
+    orig = host.get("_orig_alias") or host["alias"]
+    if orig != host["alias"] and orig in cfg["hosts"]:
+        old = cfg["hosts"].pop(orig)
+    prev = cfg["hosts"].get(host["alias"]) or old or {}
+    cfg["hosts"][host["alias"]] = {
+        "alias": host["alias"],
+        "name": host.get("name") or host["alias"],
+        "group": host.get("group") or "",
+        "color": host.get("color") or prev.get("color") or DEFAULT_COLOR,
+        "favorite": bool(prev.get("favorite", False)),
+        "hidden": bool(prev.get("hidden", False)),
+        "remote_dir": prev.get("remote_dir") or "",
+        "after_cmd": prev.get("after_cmd") or "",
+        "tmux_session": prev.get("tmux_session") or "",
+        "via": host.get("via") or prev.get("via") or "",
+    }
+    write_host_config(cfg)
+
+
 def append_host_meta(host):
     os.makedirs(os.path.dirname(CONF), exist_ok=True)
     cfg = load_config()
@@ -442,6 +562,62 @@ def create_host(draft):
             secrets.delete_password(cleaned["alias"])
         return None, [str(exc)]
     return make_item(cleaned["alias"], cleaned), []
+
+
+def update_host(draft):
+    errors, cleaned = validate_draft(draft)
+    if errors:
+        return None, errors
+    orig = draft.get("_orig_alias") or cleaned["alias"]
+    cleaned["_orig_alias"] = orig
+    password = cleaned.get("password") or ""
+    if password:
+        try:
+            secrets.store_password(
+                cleaned["alias"], password, user=cleaned.get("user") or "")
+        except Exception as exc:
+            return None, [f"密码没写进凭据库：{exc}"]
+        if orig != cleaned["alias"]:
+            secrets.delete_password(orig)
+        cleaned["password"] = ""
+    try:
+        replace_ssh_block(orig, cleaned)
+        upsert_host_meta(cleaned)
+    except Exception as exc:
+        return None, [str(exc)]
+    return make_item(cleaned["alias"], cleaned), []
+
+
+def read_ssh_block_fields(alias):
+    fields = {"hostname": "", "user": "", "port": "", "identity": ""}
+    path = SSH_CONFIG
+    if not os.path.isfile(path):
+        return fields
+    with open(path, encoding="utf-8") as handle:
+        lines = handle.readlines()
+    inside = False
+    for line in lines:
+        if re.match(rf"^Host\s+{re.escape(alias)}(?:\s|$)", line):
+            inside = True
+            continue
+        if inside and re.match(r"^Host\s+", line):
+            break
+        if not inside or not line.strip() or line.lstrip().startswith("#"):
+            continue
+        parts = line.strip().split(None, 1)
+        if len(parts) != 2:
+            continue
+        key = parts[0].lower()
+        value = parts[1].strip().strip('"')
+        if key == "hostname":
+            fields["hostname"] = value
+        elif key == "user":
+            fields["user"] = value
+        elif key == "port":
+            fields["port"] = value
+        elif key == "identityfile" and not fields["identity"]:
+            fields["identity"] = value
+    return fields
 
 
 def item_matches(item, query):
@@ -496,21 +672,48 @@ def menu_sections(items, query=""):
 
 # ─────────────────────────── 渲染 ───────────────────────────
 
-def host_row(item, num):
+def host_row(item, num, btn_hover=None):
     def render(selected):
         mark = f"{FG(item['color'])}▸{RESET}" if selected else " "
         bg = SELBG if selected else ""
         star = f"{YELLOW}★{RESET}{bg}" if item.get("favorite") else " "
-        name_w = min(22, max(16, tui.BOX_W // 4))
-        group_w = 10
-        summary_w = max(tui.BOX_W - name_w - group_w - 24, 8)
-        when = ago(item["ts"]) if item.get("ts") else ""
+        play = PLAY_BTN
+        edit = EDIT_BTN
+        btn_w = dwidth(play) + dwidth(edit)
+        prefix_w = 8
+        name_w = max(18, min(36, tui.BOX_W // 3))
+        summary_w = max(tui.BOX_W - prefix_w - name_w - btn_w - 4, 16)
+        play_bg = SELBG if selected or btn_hover == "play" else ""
+        edit_bg = SELBG if selected or btn_hover == "edit" else ""
         body = (
-            f"{bg}  {mark}{bg} {DIM}{str(num).rjust(2)}{RESET}{bg} {star} "
-            f"{FG(item['color'])}{BOLD if selected else ''}{pad(item['name'], name_w)}{RESET}{bg}"
-            f"{MUTED}{pad(item['group'] or item['alias'], group_w)}{RESET}{bg} "
+            f"{bg}  {mark}{bg} {DIM}{str(num).rjust(2)}{RESET}{bg} {star}"
+            f"{FG(item['color'])}{BOLD if selected else ''}{pad(item['name'], name_w)}{RESET}{bg} "
             f"{DIM}{pad_tail(item.get('summary') or item['alias'], summary_w)}{RESET}{bg}"
-            f"{DIM}{pad(when, 9)}{RESET}{bg}"
+            f"{play_bg}{FG('#4ade80') if (selected or btn_hover == 'play') else DIM}{play}{RESET}{bg}"
+            f"{edit_bg}{TEXT if (selected or btn_hover == 'edit') else DIM}{edit}{RESET}{bg}"
+        )
+        line = fit_row(body)
+        total = tui.BOX_W + 2
+        edit_end = total - 1
+        edit_start = edit_end - dwidth(edit) + 1
+        play_end = edit_start - 1
+        play_start = play_end - dwidth(play) + 1
+        render.hotspots = [
+            {"kind": "play", "start": play_start, "end": play_end},
+            {"kind": "edit", "start": edit_start, "end": edit_end},
+        ]
+        return line
+    return render
+
+
+def group_row(title, count, collapsed):
+    def render(selected):
+        arrow = "▸" if collapsed else "▾"
+        bg = SELBG if selected else ""
+        label = f"{arrow} {title}"
+        body = (
+            f"{bg}  {TEXT}{BOLD if selected else ''}{pad(label, max(tui.BOX_W - 12, 16))}{RESET}{bg}"
+            f"{DIM}{str(count).rjust(3)}{RESET}{bg}"
         )
         return fit_row(body)
     return render
@@ -554,9 +757,19 @@ def field_row(label, value, secret=False, placeholder=""):
     return render
 
 
-def pick_new_host(term, cfg):
+def pick_new_host(term, cfg, existing=None):
     draft = {key: "" for key, _label, _secret, _hint in NEW_HOST_FIELDS}
     draft["port"] = "22"
+    if existing:
+        fields = read_ssh_block_fields(existing["alias"])
+        draft["alias"] = existing["alias"]
+        draft["hostname"] = fields["hostname"]
+        draft["user"] = fields["user"]
+        draft["port"] = fields["port"] or "22"
+        draft["identity"] = fields["identity"]
+        draft["name"] = existing.get("name") or existing["alias"]
+        draft["group"] = existing.get("group") or ""
+        draft["_orig_alias"] = existing["alias"]
     sel = 0
     hover = None
     error = ""
@@ -574,11 +787,13 @@ def pick_new_host(term, cfg):
         rows.append((True, action_row("+", "保存", "写入 ssh config，密码进凭据库", "#4ade80")))
         rows.append((True, action_row("×", "取消", "不保存", DEFAULT_COLOR)))
         visual_sel = hover if hover is not None else sel
+        mode = "编辑连接" if existing else "新连接"
         geom = draw(
-            f"{TEXT}{BOLD}Host Deck{RESET}{DIM} › 新连接{RESET}",
+            f"{TEXT}{BOLD}Host Deck{RESET}{DIM} › {mode}{RESET}",
             status_right(len(cfg.get("hosts") or {})),
             rows, visual_sel,
             "↑↓ 换项 · 输入文字 · Enter 保存/下一项 · Esc 取消",
+            box_max=100,
         )
         kind, *rest = term.key()
         if kind == "mouse":
@@ -588,7 +803,7 @@ def pick_new_host(term, cfg):
                 hover = index
             elif action == "click" and index is not None:
                 if index == save_idx:
-                    item, errors = create_host(draft)
+                    item, errors = (update_host if existing else create_host)(draft)
                     if item is None:
                         error = "；".join(errors)
                     else:
@@ -610,7 +825,7 @@ def pick_new_host(term, cfg):
             sel = (sel + 1) % total
         elif key in ("\r", "\n"):
             if sel == save_idx:
-                item, errors = create_host(draft)
+                item, errors = (update_host if existing else create_host)(draft)
                 if item is None:
                     error = "；".join(errors)
                 else:
@@ -635,14 +850,20 @@ def pick_new_host(term, cfg):
             error = ""
 
 
+def _host_of(entry):
+    return entry["item"] if isinstance(entry, dict) and entry.get("kind") == "host" else entry
+
+
 def pick_host(term, items, cfg, attach=False):
     sel = 0
     hover = None
     tab_hover = None
+    btn_hover = None
     query = ""
     search_mode = False
     error = ""
     color = DEFAULT_COLOR
+    collapsed = read_collapsed()
     fill_summaries(items)
 
     while True:
@@ -652,6 +873,7 @@ def pick_host(term, items, cfg, attach=False):
         sections = menu_sections(items, query if search_mode or query else "")
         rows = []
         selectable = []
+        host_count = 0
         if search_mode:
             shown = pad_tail(query, max(tui.BOX_W - 14, 12)).rstrip() if query else ""
             rows.append((False, lambda _s, shown=shown: (
@@ -661,12 +883,18 @@ def pick_host(term, items, cfg, attach=False):
             if error:
                 rows.append((False, lambda _s, error=error: f"    {RED}{error}{RESET}"))
         for title, group_items in sections:
+            hiding = bool(title) and title in collapsed and not search_mode
             if title:
-                rows.append((False, section_row(title)))
+                selectable.append({"kind": "group", "title": title})
+                rows.append((True, group_row(title, len(group_items), hiding)))
+            if hiding:
+                continue
             for item in group_items:
-                selectable.append(item)
-                rows.append((True, host_row(item, len(selectable))))
-        if not selectable and not search_mode:
+                host_count += 1
+                selectable.append({"kind": "host", "item": item, "num": host_count})
+                hover_btn = btn_hover[1] if btn_hover and btn_hover[0] == len(selectable) - 1 else None
+                rows.append((True, host_row(item, host_count, hover_btn)))
+        if host_count == 0 and not search_mode:
             rows.append((False, lambda _s: f"    {DIM}没有发现 SSH Host 别名{RESET}"))
             rows.append((False, lambda _s: (
                 f"    {DIM}按 n 添加连接，或按 / 输入目标{RESET}"
@@ -686,23 +914,40 @@ def pick_host(term, items, cfg, attach=False):
         title, tab_regions = header_line(attach, tab_hover, color)
         visual_sel = hover if hover is not None else sel
         hint = ("输入筛选 · Enter 连接 · Esc 退出搜索" if search_mode else
-                "↑↓/鼠标 选 · Enter 连接 · n 新连接 · i 导入 Tabby · / 搜索 · q 退出")
-        geom = draw(title, status_right(len(items)), rows, visual_sel, hint, tab_regions)
+                "↑↓ 选 · Enter/▶ 连接 · ✎/e 编辑 · 分组回车折叠 · n 新建 · / 搜索 · q 退出")
+        cols, _rows_h = shutil.get_terminal_size((100, 30))
+        geom = draw(title, status_right(len(items)), rows, visual_sel, hint, tab_regions,
+                    box_max=max(88, cols - 8))
         kind, *rest = term.key()
         if kind == "mouse":
             row, col, action = rest
             tab = hit_tab(geom, row, col)
+            cell = hit_cell(geom, row, col)
             index = hit(geom, row, col)
             if action == "move":
                 tab_hover = tab
                 hover = None if tab is not None else index
+                btn_hover = (cell["index"], cell["kind"]) if cell and cell["kind"] in ("play", "edit") else None
             elif action == "click" and tab is not None:
                 attach = tab == "attach"
                 tab_hover = None
+            elif action == "click" and cell and cell["kind"] == "play":
+                entry = selectable[cell["index"]]
+                if entry.get("kind") == "host":
+                    return entry["item"], attach
+            elif action == "click" and cell and cell["kind"] == "edit":
+                entry = selectable[cell["index"]]
+                if entry.get("kind") == "host":
+                    if pick_new_host(term, cfg, existing=entry["item"]):
+                        return "reload", attach
             elif action == "click" and index is not None:
                 if index < len(selectable):
-                    return selectable[index], attach
-                if index == search_idx:
+                    entry = selectable[index]
+                    if entry.get("kind") == "group":
+                        collapsed = toggle_collapsed(entry["title"])
+                    else:
+                        return entry["item"], attach
+                elif index == search_idx:
                     search_mode, error = True, ""
                 elif index == add_idx:
                     if pick_new_host(term, cfg):
@@ -712,16 +957,18 @@ def pick_host(term, items, cfg, attach=False):
             continue
         hover = None
         tab_hover = None
+        btn_hover = None
         key = rest[0]
         if search_mode:
-            if key == "up" and selectable:
+            hosts = [e["item"] for e in selectable if e.get("kind") == "host"]
+            if key == "up" and hosts:
                 sel = len(selectable) - 1 if sel < 0 or sel >= len(selectable) else (
                     sel - 1) % len(selectable)
-            elif key == "down" and selectable:
+            elif key == "down" and hosts:
                 sel = 0 if sel < 0 or sel >= len(selectable) else (sel + 1) % len(selectable)
             elif key in ("\r", "\n"):
-                if 0 <= sel < len(selectable):
-                    return selectable[sel], attach
+                if 0 <= sel < len(selectable) and selectable[sel].get("kind") == "host":
+                    return selectable[sel]["item"], attach
                 if query.strip():
                     return make_item(query.strip(), adhoc=True, cfg=cfg), attach
                 error = "输入 Host 别名或 user@host"
@@ -741,26 +988,35 @@ def pick_host(term, items, cfg, attach=False):
             sel = (sel + 1) % (import_idx + 1)
         elif key in ("\r", "\n", "right", "l"):
             if sel < len(selectable):
-                return selectable[sel], attach
-            if sel == search_idx:
+                entry = selectable[sel]
+                if entry.get("kind") == "group":
+                    collapsed = toggle_collapsed(entry["title"])
+                else:
+                    return entry["item"], attach
+            elif sel == search_idx:
                 search_mode, error = True, ""
             elif sel == add_idx:
                 if pick_new_host(term, cfg):
                     return "reload", attach
             elif sel == import_idx:
                 return "import-tabby", attach
-        elif len(key) == 1 and "1" <= key <= "9" and int(key) <= len(selectable):
-            return selectable[int(key) - 1], attach
+        elif len(key) == 1 and "1" <= key <= "9":
+            hosts = [e["item"] for e in selectable if e.get("kind") == "host"]
+            if int(key) <= len(hosts):
+                return hosts[int(key) - 1], attach
         elif key == "a":
             attach = True
         elif key == "c":
             attach = False
         elif key == "\t":
             attach = not attach
-        elif key == "f" and sel < len(selectable):
-            toggle_favorite(selectable[sel]["alias"], cfg)
-        elif key in ("/", "e"):
+        elif key == "f" and sel < len(selectable) and selectable[sel].get("kind") == "host":
+            toggle_favorite(selectable[sel]["item"]["alias"], cfg)
+        elif key == "/":
             search_mode, error = True, ""
+        elif key == "e" and sel < len(selectable) and selectable[sel].get("kind") == "host":
+            if pick_new_host(term, cfg, existing=selectable[sel]["item"]):
+                return "reload", attach
         elif key == "n":
             if pick_new_host(term, cfg):
                 return "reload", attach

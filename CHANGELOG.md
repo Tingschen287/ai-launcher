@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.7 - 2026-08-26
+
+- Host Deck 0.4.0: wider host list, collapsible groups, per-row connect and edit buttons.
+
 ## 0.5.6 - 2026-08-26
 
 - Host Deck 0.3.2: feed remembered passwords through WSL ASKPASS, and reach Tabby hosts via a Windows TCP proxy.

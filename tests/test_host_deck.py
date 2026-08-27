@@ -41,11 +41,13 @@ class HostDeckTests(unittest.TestCase):
             "HIST": host.HIST,
             "FAV": host.FAV,
             "SSH_CONFIG": host.SSH_CONFIG,
+            "COLLAPSED": host.COLLAPSED,
         }
         host.CONF = str(root / "hosts.toml")
         host.HIST = str(root / "history.tsv")
         host.FAV = str(root / "favorites.txt")
         host.SSH_CONFIG = str(self.ssh_config)
+        host.COLLAPSED = str(root / "collapsed.txt")
         os.environ["HOST_DECK_SKIP_SSH_G"] = "1"
         os.environ["HOST_DECK_FORCE_WSL"] = "1"
         os.environ["HOST_DECK_SECRETS_DIR"] = str(root / "secrets")
@@ -316,6 +318,55 @@ class HostDeckTests(unittest.TestCase):
                 FakeTerm("n", "esc", "q"), [], host.default_config())
         self.assertIsNone(result)
         self.assertFalse(Path(host.SSH_CONFIG).exists())
+
+    def test_replace_ssh_block_keeps_other_hosts(self):
+        self.write_ssh("Host keep\n    HostName old.example\n\nHost box-a\n    HostName a.example\n")
+        host.replace_ssh_block("box-a", {
+            "alias": "box-a",
+            "hostname": "b.example",
+            "user": "linux",
+            "port": "2222",
+            "identity": "",
+        })
+        text = Path(host.SSH_CONFIG).read_text(encoding="utf-8")
+        self.assertIn("Host keep", text)
+        self.assertIn("HostName old.example", text)
+        self.assertIn("HostName b.example", text)
+        self.assertIn("Port 2222", text)
+        self.assertNotIn("HostName a.example", text)
+
+    def test_group_enter_toggles_collapsed(self):
+        self.write_ssh("Host box-a\nHost box-b\n")
+        cfg = host.default_config()
+        cfg["hosts"]["box-a"] = host.make_item("box-a", {"group": "prod"})
+        cfg["hosts"]["box-b"] = host.make_item("box-b", {"group": "prod"})
+        items = host.build_items(cfg)
+        geometry = {"rows": {}, "tabs": [], "cells": [], "left": 0, "width": 40}
+        with patch.object(host, "draw", return_value=geometry), \
+                patch.object(host, "fill_summaries"):
+            result = host.pick_host(FakeTerm("\r", "q"), items, cfg)
+        self.assertIsNone(result)
+        self.assertIn("prod", host.read_collapsed())
+
+    def test_edit_button_opens_form(self):
+        self.write_ssh("Host box-a\n    HostName a.example\n")
+        items = host.build_items(host.default_config())
+        geometry = {
+            "rows": {10: 0},
+            "tabs": [],
+            "cells": [{"row": 10, "start": 30, "end": 34, "kind": "edit", "index": 0}],
+            "left": 0,
+            "width": 40,
+        }
+        events = EventTerm(
+            ("mouse", 10, 32, "click"),
+            ("key", "esc"),
+            ("key", "q"),
+        )
+        with patch.object(host, "draw", return_value=geometry), \
+                patch.object(host, "fill_summaries"):
+            result = host.pick_host(events, items, host.default_config())
+        self.assertIsNone(result)
 
     def test_menu_sections_put_favorites_first(self):
         items = [

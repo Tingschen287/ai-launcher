@@ -170,6 +170,8 @@ host --import-tabby        从 Tabby 导入 SSH 连接（不改 Tabby）
 host --version             查看版本
 ```
 
+选择器会尽量铺满终端宽度。分组标题可点，折叠/展开。每条右侧有 `▶` 连接和 `✎` 编辑（键盘 `e`）。
+
 选择器里按 `n`，或点 `+ 新连接`，可以追加一台主机：别名、主机、用户、端口、密钥路径、显示名、分组、密码。别名会写入 `~/.ssh/config` 末尾，不改已有 Host。密码写入 Windows 凭据库（测试可用 `HOST_DECK_SECRETS_DIR`），连接时通过 `SSH_ASKPASS` 交给 `ssh`。主机密钥确认不会自动点 yes。
 
 `host --import-tabby` 或选择器里的「从 Tabby 导入」会读取 Tabby 的 `config.yaml`，把 SSH 主机追加进 `~/.ssh/config` 和 Host Deck 显示名/分组。能在 Windows 凭据库里对上的密码会拷到 Host Deck 自己的凭据项。Tabby 配置不改，可以再导一次，已导入的会跳过。
